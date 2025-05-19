@@ -1,0 +1,90 @@
+
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>市場指標看板</title>
+  <style>
+    body {
+      background-color: #000;
+      color: #fff;
+      font-family: 'Segoe UI', sans-serif;
+      padding: 40px;
+      line-height: 1.8;
+    }
+    h1 {
+      font-size: 28px;
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .data-box {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #111;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #444;
+    }
+    .item {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid #333;
+    }
+    .item:last-child {
+      border-bottom: none;
+    }
+    .label {
+      font-weight: bold;
+      color: #aaa;
+    }
+    .value {
+      color: #0f0;
+    }
+    .negative {
+      color: #f55;
+    }
+    .neutral {
+      color: #ccc;
+    }
+  </style>
+</head>
+<body>
+  <h1>市場指標看板（即時更新）</h1>
+  <div class="data-box" id="dashboard">
+    <div class="item"><div class="label">S&P 500</div><div class="value" id="sp500">載入中...</div></div>
+    <div class="item"><div class="label">NASDAQ</div><div class="value" id="nasdaq">載入中...</div></div>
+    <div class="item"><div class="label">Dow Jones</div><div class="value" id="dowjones">載入中...</div></div>
+    <div class="item"><div class="label">VIX</div><div class="value" id="vix">載入中...</div></div>
+    <div class="item"><div class="label">Fear & Greed</div><div class="value" id="feargreed">載入中...</div></div>
+    <div class="item"><div class="label">10Y Yield</div><div class="value" id="yield10y">載入中...</div></div>
+    <div class="item"><div class="label">20Y Yield</div><div class="value" id="yield20y">載入中...</div></div>
+    <div class="item"><div class="label">Bitcoin (BTC/USD)</div><div class="value" id="btc">載入中...</div></div>
+    <div class="item"><div class="label">Gold (XAU/USD)</div><div class="value" id="gold">載入中...</div></div>
+    <div class="item"><div class="label">USD/TWD</div><div class="value" id="usdtwd">載入中...</div></div>
+  </div>
+  <script>
+    async function fetchData() {
+      try {
+        // 示意：抓 Fear & Greed Index
+        const fearGreed = await fetch('https://production.dataviz.cnn.io/index/fearandgreed/graphdata');
+        const fgData = await fearGreed.json();
+        const latest = fgData.fear_and_greed[dataLength = fgData.fear_and_greed.length - 1];
+        document.getElementById("feargreed").innerText = latest.score + " (" + latest.rating + ")";
+
+        // 其他欄位可接 Yahoo Finance Unofficial API 或 CoinGecko API
+
+        // 示意：Bitcoin
+        const btc = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
+        const btcData = await btc.json();
+        document.getElementById("btc").innerText = "$" + btcData.bitcoin.usd.toLocaleString();
+
+      } catch (error) {
+        console.error(error);
+      }
+    }
+    fetchData();
+    setInterval(fetchData, 60000); // 每60秒更新
+  </script>
+</body>
+</html>
