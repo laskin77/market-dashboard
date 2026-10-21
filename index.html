@@ -34,18 +34,18 @@ footer{margin-top:32px;border-top:1px solid #1c2a42;padding:14px 0;color:#8a97ab
 .live .delay{margin:0 0 8px}</style>
 <div class="jc"><div class="jh"><b class="jt">加權指數 江波圖（含均價線）</b><span id="taiex-p" class="jp num"></span></div><div id="taiex-s" class="js"></div><div id="taiex" class="c"></div></div>
 <div class="jc"><div class="jh"><b class="jt">台指期 江波圖（日/夜盤，含均價線）</b><span id="tx-p" class="jp num"></span></div><div id="tx-s" class="js"></div><div id="tx" class="c"></div></div>
-<div class="note delay">資料約每 5 分鐘更新，可能延遲 5–15 分鐘</div>
+<div class="note delay">資料約每 45 秒抓取，此頁約每 30–60 秒讀取</div>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script>
 (function(){
 var TZ=8*3600;
 function rows(pts,i){var m=new Map();pts.forEach(function(p){if(p[i]==null)return;m.set(p[0]+TZ,p[i])});return Array.from(m.entries()).sort(function(a,b){return a[0]-b[0]}).map(function(e){return {time:e[0],value:e[1]}})}
-function upd(s){return s?String(s).replace("T"," ").replace(/[+-]\d\d:\d\d$/,"").slice(0,16):""}
+function upd(s){var m=String(s||"").match(/(\d{2}:\d{2}:\d{2})/);return m?m[1]:""}
 var box={};
-async function draw(id,url){
+async function draw(id,src){
   var meta=document.getElementById(id+"-s"),price=document.getElementById(id+"-p");
   try{
-    var d=await (await fetch(url+"?t="+Date.now())).json();
+    var d=typeof src==="string"?await (await fetch(src+(src.indexOf("?")<0?"?t="+Date.now():""))).json():src;
     if(!d.points||!d.points.length) throw new Error("empty");
     var last=d.points[d.points.length-1][1],up=last>=d.prev,col=up?"#e5383b":"#2bb673",b=box[id];
     if(!b){
@@ -63,11 +63,24 @@ async function draw(id,url){
     b.ch.timeScale().fitContent();
     var diff=last-d.prev,pct=d.prev?(diff/d.prev*100):0;
     price.innerHTML='<span class="'+(up?"up":"dn")+'">'+last.toLocaleString()+" "+(diff>=0?"▲":"▼")+Math.abs(diff).toFixed(2)+" ("+pct.toFixed(2)+"%)</span>";
-    meta.textContent=(d.symbol?d.symbol+" "+(d.session==="night"?"夜盤":"日盤")+" · ":"")+"更新 "+upd(d.updated);
+    meta.textContent=(d.symbol?d.symbol+" "+(d.session==="night"?"夜盤":"日盤")+" · ":"")+"更新時間 "+upd(d.updated);
   }catch(err){meta.textContent="資料載入失敗";}
 }
-function go(){draw("taiex","data/taiex.json");draw("tx","data/tx.json")}
-go();setInterval(go,60000);
+var gap=30000,lastSha="",loaded=false;
+function applyLive(d){if(d.taiex)draw("taiex",d.taiex);if(d.tx)draw("tx",d.tx);if(d.etf&&window.applyEtf)window.applyEtf(d.etf);loaded=true;}
+function tick(){
+  fetch("https://api.github.com/repos/laskin77/market-dashboard/git/ref/heads/data?t="+Date.now(),{cache:"no-store"}).then(function(r){
+    var remH=r.headers.get("X-RateLimit-Remaining"),reset=(+r.headers.get("X-RateLimit-Reset")||0)*1000;
+    if(r.status===403||r.status===429){gap=Math.max(60000,(reset||Date.now()+120000)-Date.now());throw 0;}
+    else if(remH!=null&&+remH<15&&reset>Date.now()){gap=Math.min(300000,Math.max(60000,Math.ceil((reset-Date.now())/Math.max(+remH,1))));}
+    else gap=30000;
+    if(!r.ok)throw 0;return r.json();
+  }).then(function(j){
+    var sha=j.object&&j.object.sha;if(!sha)throw 0;window.__liveSha=sha;if(sha===lastSha)return null;lastSha=sha;
+    return fetch("https://raw.githubusercontent.com/laskin77/market-dashboard/"+sha+"/live.json",{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json();});
+  }).then(function(d){if(d)applyLive(d);}).catch(function(){if(!loaded){draw("taiex","data/taiex.json");draw("tx","data/tx.json");}}).then(function(){setTimeout(tick,gap);});
+}
+tick();
 })();
 </script>
 </section>
@@ -92,7 +105,7 @@ S.forEach(function(c){c.remove()});S.length=0;S.k=0;S.intra=null;intra(s)}
 var S=[],TZ=8*3600,O={autoSize:true,layout:{attributionLogo:false,background:{color:"#0d1525"},textColor:"#8a97ab"},grid:{vertLines:{visible:false},horzLines:{color:"#1c2a42"}},timeScale:{borderVisible:false},rightPriceScale:{borderVisible:false}};
 function mk(id,o){var c=LightweightCharts.createChart(document.getElementById(id),Object.assign({},O,o||{}));S.push(c);return c}
 async function intra(s){var st=document.getElementById("sq-is");st.textContent="載入中…";
- try{var r=await fetch("data/intraday/"+s.c+".json?t="+Date.now());if(!r.ok)throw 404;var d=await r.json();S.intra=d;
+ try{var d=null;if(window.__liveSha){var rr=await fetch("https://raw.githubusercontent.com/laskin77/market-dashboard/"+window.__liveSha+"/intraday/"+s.c+".json",{cache:"no-store"});if(rr.ok)d=await rr.json();}if(!d){var r=await fetch("data/intraday/"+s.c+".json?t="+Date.now());if(!r.ok)throw 404;d=await r.json();}S.intra=d;
   var pv=0,vv=0,P=[],V=[],W=[];d.points.forEach(function(p){var t=p[0]+TZ;pv+=p[1]*p[2];vv+=p[2];P.push({time:t,value:p[1]});W.push({time:t,value:vv?+(pv/vv).toFixed(2):p[1]});V.push({time:t,value:p[2],color:"#3a4a6699"})});
   var last=P[P.length-1].value,up=last>=d.prev,col=up?"#e5383b":"#2bb673",ch=mk("sq-ic",{timeScale:{timeVisible:true,secondsVisible:false,borderVisible:false},rightPriceScale:{borderVisible:false,scaleMargins:{top:0.1,bottom:0.25}}});
   var a=ch.addAreaSeries({lineWidth:2,priceLineVisible:false,lineColor:col,topColor:col+"55",bottomColor:col+"05"});a.setData(P);
@@ -102,7 +115,7 @@ async function intra(s){var st=document.getElementById("sq-is");st.textContent="
   ch.timeScale().fitContent();var df=last-d.prev;
   document.getElementById("sq-p").innerHTML='<span class="'+(up?"up":"dn")+'">'+last+" "+(df>=0?"▲":"▼")+Math.abs(df).toFixed(2)+" ("+(df/d.prev*100).toFixed(2)+"%)</span>";
   var dt=new Date((d.points[0][0]+TZ)*1000).toISOString().slice(5,10).replace("-","/");
-  st.innerHTML=dt+' 1分K　<span style="color:#f2a900">— 均價線</span>　更新 '+String(d.updated).slice(11,16)+"（約5–10分延遲）";
+  st.innerHTML=dt+' 1分K　<span style="color:#f2a900">— 均價線</span>　更新時間 '+((String(d.updated).match(/(\d{2}:\d{2}:\d{2})/)||["",""])[1])+"（約5–10分延遲）";
  }catch(e){st.innerHTML="此股不在盤中自動更新清單（前一日成交值前 150 大＋自選清單），暫無江波圖。可看「技術線圖」。"}}
 function sma(a,n,i){var s=0;for(var j=i-n+1;j<=i;j++)s+=a[j];return s/n}
 async function tech(s){S.k=1;var st=document.getElementById("sq-ks");st.textContent="載入中…";
@@ -170,6 +183,6 @@ document.addEventListener("click",function(e){if(!e.target.closest("#qf"))G.hidd
 <div class="sec"><div class="box"><h3>外資買超</h3><table><thead><tr><th>#</th><th>股票</th><th class="r">買超金額<br>(億元)</th><th class="r">收盤</th><th class="r">漲跌幅</th></tr></thead><tbody><tr><td class="num">1</td><td>南亞 <span class="code num">1303</span></td><td class="r num up">+77.45</td><td class="r num">320.50</td><td class="r num up">+8.28%</td></tr><tr><td class="num">2</td><td>鴻海 <span class="code num">2317</span></td><td class="r num up">+75.43</td><td class="r num">250.00</td><td class="r num up">+3.52%</td></tr><tr><td class="num">3</td><td>緯創 <span class="code num">3231</span></td><td class="r num up">+38.83</td><td class="r num">195.00</td><td class="r num up">+3.17%</td></tr><tr><td class="num">4</td><td>大立光 <span class="code num">3008</span></td><td class="r num up">+24.92</td><td class="r num">6,170.00</td><td class="r num up">+3.26%</td></tr><tr><td class="num">5</td><td>國巨 <span class="code num">2327</span></td><td class="r num up">+22.69</td><td class="r num">542.00</td><td class="r num up">+3.63%</td></tr></tbody></table></div><div class="box"><h3>投信買超</h3><table><thead><tr><th>#</th><th>股票</th><th class="r">買超金額<br>(億元)</th><th class="r">收盤</th><th class="r">漲跌幅</th></tr></thead><tbody><tr><td class="num">1</td><td>台積電 <span class="code num">2330</span></td><td class="r num up">+33.58</td><td class="r num">2,420.00</td><td class="r num up">+0.62%</td></tr><tr><td class="num">2</td><td>奇鋐 <span class="code num">3017</span></td><td class="r num up">+14.62</td><td class="r num">3,235.00</td><td class="r num dn">−2.71%</td></tr><tr><td class="num">3</td><td>欣興 <span class="code num">3037</span></td><td class="r num up">+10.67</td><td class="r num">1,100.00</td><td class="r num up">+4.27%</td></tr><tr><td class="num">4</td><td>創意 <span class="code num">3443</span></td><td class="r num up">+10.43</td><td class="r num">8,000.00</td><td class="r num up">+3.29%</td></tr><tr><td class="num">5</td><td>富世達 <span class="code num">6805</span></td><td class="r num up">+9.11</td><td class="r num">2,395.00</td><td class="r num up">+4.59%</td></tr></tbody></table></div></div>
 <div class="note">買超金額為估算（以收盤價計）＝證交所 T86 買賣超股數 × 10/21 收盤價（MI_INDEX）；外資為外陸資（不含外資自營商）；僅上市。</div>
 <h2 id="s6">五、ETF 專區</h2><style>.etfs{display:grid;grid-template-columns:1fr;gap:8px}@media(min-width:700px){.etfs{grid-template-columns:repeat(2,1fr)}}.etf .note{overflow-wrap:anywhere}.etag{font-size:11px;padding:0 4px;border:1px solid #e5383b;color:#e5383b}.etag.est{border-color:#8a97ad;color:#8a97ad}</style><div class="etfs" id="etfbox"><div class="card etf" data-c="0050"><div class="cn">0050 元大台灣50</div><div class="cv num up" data-k="last">108.15</div><div class="cc num up" data-k="chg">+0.90　+0.84%</div><div class="note">下次配息：未公告，預估 2027年1月 <span class='etag est'>預估</span></div><div class="note">半年配 (1月、7月)｜上次 0.6元 (除息 07/21)</div></div><div class="card etf" data-c="0056"><div class="cn">0056 元大高股息</div><div class="cv num up" data-k="last">58.75</div><div class="cc num up" data-k="chg">+1.30　+2.26%</div><div class="note">下次配息：除息 10/22　發放 11/11　<b>1.72元</b> <span class=etag>已公告</span></div><div class="note">季配 (1/4/7/10月)｜上次 1.35元 (除息 07/21)</div></div><div class="card etf" data-c="00878"><div class="cn">00878 國泰永續高股息</div><div class="cv num up" data-k="last">35.39</div><div class="cc num up" data-k="chg">+0.51　+1.46%</div><div class="note">下次配息：未公告，預估 11月 <span class='etag est'>預估</span></div><div class="note">季配 (2/5/8/11月)｜上次 1.01元 (除息 08/18)</div></div><div class="card etf" data-c="00919"><div class="cn">00919 群益台灣精選高息</div><div class="cv num up" data-k="last">32.53</div><div class="cc num up" data-k="chg">+0.44　+1.37%</div><div class="note">下次配息：未公告，預估 12月 <span class='etag est'>預估</span></div><div class="note">季配 (3/6/9/12月)｜上次 1.1元 (除息 09/16)</div></div><div class="card etf" data-c="00981A"><div class="cn">00981A 主動統一台股增長</div><div class="cv num up" data-k="last">28.88</div><div class="cc num up" data-k="chg">+0.15　+0.52%</div><div class="note">下次配息：未公告，預估 12月 <span class='etag est'>預估</span></div><div class="note">季配 (3/6/9/12月)｜上次 0.63元 (除息 09/16)</div></div></div><div class="note" id="etfupd">股價：10/21 收盤（TWSE MIS）｜配息：TWSE ETF e添富配息清單、除權息預告表；預估僅依往例月份</div>
-<script>(async function(){try{var d=await(await fetch("data/etf.json?t="+Date.now())).json();document.querySelectorAll("#etfbox .etf").forEach(function(e){var x=d.quotes[e.dataset.c];if(!x||x.last==null)return;var cl=x.chg>0?"up":x.chg<0?"dn":"";var a=e.querySelector('[data-k=last]'),b=e.querySelector('[data-k=chg]');a.className="cv num "+cl;b.className="cc num "+cl;a.textContent=x.last.toFixed(2);b.textContent=(x.chg>=0?"+":"")+x.chg.toFixed(2)+"　"+(x.pct>=0?"+":"")+x.pct.toFixed(2)+"%";});var t=d.quotes["0050"];document.getElementById("etfupd").firstChild.textContent="股價："+t.date.slice(4,6)+"/"+t.date.slice(6)+" "+t.time.slice(0,5)+(t.time>="13:30"?" 收盤":" 最新")+"（"+t.src+"）｜配息：TWSE ETF e添富配息清單、除權息預告表；預估僅依往例月份";}catch(e){}})();</script>
+<script>window.applyEtf=function(d){try{if(!d||!d.quotes)return;document.querySelectorAll("#etfbox .etf").forEach(function(e){var x=d.quotes[e.dataset.c];if(!x||x.last==null)return;var cl=x.chg>0?"up":x.chg<0?"dn":"";var a=e.querySelector('[data-k=last]'),b=e.querySelector('[data-k=chg]');a.className="cv num "+cl;b.className="cc num "+cl;a.textContent=x.last.toFixed(2);b.textContent=(x.chg>=0?"+":"")+x.chg.toFixed(2)+"　"+(x.pct>=0?"+":"")+x.pct.toFixed(2)+"%";});var t=d.quotes["0050"];if(t&&t.date)document.getElementById("etfupd").firstChild.textContent="股價："+t.date.slice(4,6)+"/"+t.date.slice(6)+" "+t.time.slice(0,5)+(t.time>="13:30"?" 收盤":" 最新")+"（"+t.src+"）｜配息：TWSE ETF e添富配息清單、除權息預告表；預估僅依往例月份";}catch(e){}};(async function(){try{applyEtf(await(await fetch("data/etf.json?t="+Date.now())).json())}catch(e){}})();</script>
 <footer>資料整理自公開資訊，不構成投資建議。<br>更新時間：2026-10-21 台北時間</footer>
 </div></body></html>

@@ -4,28 +4,30 @@ on:
     branches: [main]
     paths: ['live/**', '.github/workflows/live.yml']
   schedule:
-    # UTC times. Taipei = UTC+8. Day session 08:45-13:45 TPE = 00:45-05:45 UTC (Mon-Fri)
-    - cron: "*/5 0-5 * * 1-5"
-    # Night session 15:00-05:00 TPE = 07:00-21:00 UTC (Mon-Fri; Sat 00-05 TPE = Fri 16-21 UTC covered)
-    - cron: "*/5 7-21 * * 1-5"
+    # Taipei = UTC+8. Day open 08:40 TPE = 00:40 UTC, Mon–Fri. Hourly safety 09:40–13:40 TPE.
+    - cron: "40 0 * * 1-5"
+    - cron: "40 1-5 * * 1-5"
+    # Night open 14:55 TPE = 06:55 UTC. Hourly safety 15:55 TPE through 04:55 next day
+    # (Fri 20:55 UTC is Sat 04:55 Taipei).
+    - cron: "55 6 * * 1-5"
+    - cron: "55 7-20 * * 1-5"
   workflow_dispatch:
 permissions:
   contents: write
-concurrency: { group: live, cancel-in-progress: false }
+concurrency:
+  group: live
+  cancel-in-progress: false
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
-    env:
-      OUT_DIR: data
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
-      - run: python3 live/fetch.py
-      - run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898208+github-actions[bot]@users.noreply.github.com"
-          git add data/*.json data/intraday/*.json
-          git diff --cached --quiet || (git commit -m "data: $(date -u +%FT%TZ)" && git pull --rebase origin main && git push origin HEAD:main)
+          fetch-depth: 1
+      - name: session loop
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OUT_DIR: /tmp/mkt-data
+        run: python3 live/loop.py

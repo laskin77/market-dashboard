@@ -16,8 +16,14 @@ def get(url, body=None):
         return json.load(r)
 
 def ts(day, hhmmss):  # day 'YYYYMMDD', hhmmss 'HH:MM:SS' or 'HHMMSS' -> epoch (Taipei)
-    s = hhmmss.replace(":", "")
-    return int(datetime.datetime.strptime(day + s, "%Y%m%d%H%M%S").replace(tzinfo=TZ).timestamp())
+    s = str(hhmmss).replace(":", "")
+    # TAIFEX labels the bar at the top of the hour as HH6000 (20:60:00).
+    if len(s) >= 6 and s[2:4] == "60":
+        hh = int(s[:2]) + 1
+        s = "%02d00%s" % (hh % 24, s[4:6])
+        if hh >= 24:
+            day = (datetime.datetime.strptime(day, "%Y%m%d") + datetime.timedelta(days=1)).strftime("%Y%m%d")
+    return int(datetime.datetime.strptime(day + s[:6], "%Y%m%d%H%M%S").replace(tzinfo=TZ).timestamp())
 
 def taiex():
     try:  # TWSE official 5-sec index, downsampled to 1-min (last value per minute)
@@ -121,9 +127,13 @@ def tx():
     pts, cum_pv, cum_v = [], 0.0, 0
     night = sym.endswith("-M")
     for T, O, H, L, C, V in d["Ticks"]:
-        dd = day
-        t = ts(dd, T)
-        if night and int(T) < 150000:  # after midnight -> next calendar day
+        raw = str(T).replace(":", "")
+        try:
+            t = ts(day, raw)
+        except ValueError:
+            print("skip tick", T, file=sys.stderr)
+            continue
+        if night and raw.isdigit() and int(raw[:6]) < 150000:  # after midnight -> next calendar day
             t += 86400
         c, v = float(C), int(V)
         cum_pv += c * v; cum_v += v
@@ -168,6 +178,27 @@ def etf():
         raise RuntimeError("no etf quotes")
     return {"codes": ETFS, "quotes": out}
 
+def write_live():
+    """One bundle for the page: data/live.json = {updated, taiex, tx, etf}."""
+    stamp = datetime.datetime.now(TZ).isoformat(timespec="seconds")
+    bundle = {"updated": stamp}
+    for name in ("taiex", "tx", "etf"):
+        path = os.path.join(OUT, name + ".json")
+        if not os.path.exists(path):
+            continue
+        with open(path, encoding="utf-8") as f:
+            obj = json.load(f)
+        obj["updated"] = stamp
+        bundle[name] = obj
+    if len(bundle) == 1:
+        print("live.json skipped, no series", file=sys.stderr)
+        return
+    out = os.path.join(OUT, "live.json")
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(bundle, f, ensure_ascii=False, separators=(",", ":"))
+    tx = bundle.get("tx") or {}
+    print("live.json", stamp, tx.get("symbol", ""), (tx.get("points") or [[None]])[-1])
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     now = datetime.datetime.now(TZ).isoformat(timespec="seconds")
@@ -187,3 +218,4 @@ if __name__ == "__main__":
     hm = datetime.datetime.now(TZ).strftime("%H%M")
     if os.environ.get("STOCKS") == "1" or ("0900" <= hm <= "1345" and os.environ.get("STOCKS") != "0"):
         stocks(now)
+    write_live()
