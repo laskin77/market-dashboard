@@ -83,7 +83,41 @@ function paintUS(us){
   });
   if(stamp)stamp.textContent=open?upd(us.updated):"";
 }
-function applyLive(d){if(d.taiex)draw("taiex",d.taiex);if(d.tx)draw("tx",d.tx);if(d.etf&&window.applyEtf)window.applyEtf(d.etf);if(d.us)paintUS(d.us);loaded=true;}
+var usDirectAt=0,usHoldStatic=false;
+function applyLive(d){if(d.taiex)draw("taiex",d.taiex);if(d.tx)draw("tx",d.tx);if(d.etf&&window.applyEtf)window.applyEtf(d.etf);if(d.us&&!usHoldStatic&&Date.now()-usDirectAt>15000)paintUS(d.us);loaded=true;}
+function nyOpen(){
+  try{
+    var m={},parts=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",weekday:"short",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date());
+    parts.forEach(function(p){m[p.type]=p.value});
+    if(m.weekday==="Sat"||m.weekday==="Sun")return false;
+    var hm=(+m.hour)*60+(+m.minute);
+    return hm>=570&&hm<960;
+  }catch(e){return true;}
+}
+function taipeiHHMMSS(ms){
+  try{var s=new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Taipei",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"}).format(new Date(ms));var m=String(s).match(/(\d{2}:\d{2}:\d{2})/);if(m)return m[1];}catch(e){}
+  return "";
+}
+function pollUS(){
+  if(!nyOpen()){usHoldStatic=true;usDirectAt=0;paintUS({regular_start:1,regular_end:2,quotes:{}});setTimeout(pollUS,30000);return;}
+  var wait=4000;
+  fetch("https://quote.cnbc.com/quote-html-webservice/quote.htm?partnerId=2&requestMethod=quick&exthrs=1&noform=1&fund=1&output=json&symbols=.DJI|.SPX|.IXIC|.SOX|.VIX&_="+Date.now(),{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json();}).then(function(j){
+    var rows=((j||{}).QuickQuoteResult||{}).QuickQuote||[]; if(!Array.isArray(rows))rows=[rows];
+    var map={".DJI":"DJI",".SPX":"GSPC",".IXIC":"IXIC",".SOX":"SOX",".VIX":"VIX"},quotes={},n=0,newest=0,reg=false;
+    rows.forEach(function(q){
+      var k=map[q&&q.symbol]; if(!k||String(q.code)!=="0")return;
+      var last=+q.last,prev=+q.previous_day_closing; if(!(last>0)||!(prev>0))return;
+      quotes[k]={last:last,prev:prev}; n++;
+      var ms=+q.last_time_msec||0; if(ms>newest)newest=ms;
+      if(q.symbol===".DJI"&&q.curmktstatus==="REG_MKT")reg=true;
+    });
+    if(!reg){var closed=rows.some(function(q){return q&&q.symbol===".DJI"&&q.curmktstatus&&q.curmktstatus!=="REG_MKT";}); if(closed){usHoldStatic=true;usDirectAt=0;paintUS({regular_start:1,regular_end:2,quotes:{}});wait=60000;return;} throw 0;}
+    if(n<5)throw 0;
+    usHoldStatic=false; usDirectAt=Date.now();
+    paintUS({regular_start:1,regular_end:9e12,updated:taipeiHHMMSS(newest||Date.now()),quotes:quotes});
+  }).catch(function(){if(nyOpen())usHoldStatic=false;}).then(function(){setTimeout(pollUS,wait);});
+}
+pollUS();
 function tick(){
   fetch("https://api.github.com/repos/laskin77/market-dashboard/git/ref/heads/data?t="+Date.now(),{cache:"no-store"}).then(function(r){
     var remH=r.headers.get("X-RateLimit-Remaining"),reset=(+r.headers.get("X-RateLimit-Reset")||0)*1000;
