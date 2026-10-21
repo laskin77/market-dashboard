@@ -1,0 +1,26 @@
+name: live-intraday
+on:
+  schedule:
+    # UTC times. Taipei = UTC+8. Day session 08:45-13:45 TPE = 00:45-05:45 UTC (Mon-Fri)
+    - cron: "*/5 0-5 * * 1-5"
+    # Night session 15:00-05:00 TPE = 07:00-21:00 UTC (Mon-Fri; Sat 00-05 TPE = Fri 16-21 UTC covered)
+    - cron: "*/5 7-21 * * 1-5"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: { group: live, cancel-in-progress: false }
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      - run: python3 live/fetch.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898208+github-actions[bot]@users.noreply.github.com"
+          git add data/taiex.json data/tx.json
+          git diff --cached --quiet || (git commit -m "data: $(date -u +%FT%TZ)" && git pull --rebase origin main && git push origin HEAD:main)
