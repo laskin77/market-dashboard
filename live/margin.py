@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """大盤融資維持率 → data/margin.json
 Usage: python3 live/margin.py [YYYYMMDD]   (run after ~21:30 Asia/Taipei)
-Primary: 玩股網 WantGoo (/stock/0000A|twoA/margin-trading/historical-lending-balance-long-term).
-Fallback / cross-check: own estimate from TWSE MI_MARGN × MI_INDEX closes (上市 only).
+
+Displayed figures are WantGoo only. If the target date is not published yet, the
+latest WantGoo day is written and the page labels it (for example 10/20（玩股網）).
+The TWSE estimate is stored under estimate_crosscheck and is not shown.
 """
 import sys, json, time, datetime as dt, urllib.request, http.cookiejar, os
 TZ = dt.timezone(dt.timedelta(hours=8))
@@ -58,60 +60,43 @@ def main():
         tse, otc = wantgoo("taiex"), wantgoo("otc")
     except Exception as e:
         tse, otc = {}, {}; res["wantgoo_error"] = str(e)
+    if not tse:
+        print("WantGoo unavailable: " + json.dumps(res, ensure_ascii=False), file=sys.stderr)
+        sys.exit(1)
     est = None
     try: est = estimate_tse(target)
     except Exception as e: res["estimate_error"] = str(e)
-    if tday in tse:
-        d, w = tday, tse[tday]
-        res.update(date=d, ratio_tse=w["ratio"], source="玩股網 WantGoo（published）", method="玩股網公布之大盤融資維持率（上市；上櫃另列）")
-        bal, last = w["bal"], w["last"]
-        if est: res["estimate_crosscheck"] = {"ratio_tse": est["ratio"], "diff_pt": round(est["ratio"]-w["ratio"], 2)}
-    elif est:
-        d = tday
-        res.update(date=d, ratio_tse=est["ratio"], source="自行估算（TWSE MI_MARGN × MI_INDEX 收盤價）— ESTIMATE",
-                   method="Σ(各股融資餘額張×1000×收盤價)/融資金額(仟元×1000)；上市含ETF；無收盤價者略去(%d檔)" % est["missing"])
-        bal, last = est["bal"], est["last"]
-    elif tse:
-        d = max(tse); w = tse[d]
-        res.update(date=d, ratio_tse=w["ratio"], source="玩股網 WantGoo（published；目標日尚未公布，顯示最新）", method="玩股網公布值")
-        bal, last = w["bal"], w["last"]
-    else:
-        sys.exit("no data: " + json.dumps(res, ensure_ascii=False))
+    if est:
+        res["estimate_crosscheck"] = {
+            "date": tday, "ratio_tse": est["ratio"],
+            "margin_balance_yi": round(est["bal"] / 1e5, 2),
+            "margin_change_yi": round((est["bal"] - est["last"]) / 1e5, 2),
+            "missing": est["missing"],
+        }
+    published = tday in tse
+    d = tday if published else max(tse)
+    w = tse[d]
+    bal, last = w["bal"], w["last"]
+    res.update(date=d, published=published, ratio_tse=w["ratio"], source="玩股網",
+               method="玩股網公布之大盤融資維持率（上市；上櫃另列）")
+    if est and published:
+        res["estimate_crosscheck"]["diff_pt"] = round(est["ratio"] - w["ratio"], 2)
     if d in otc:
         res["ratio_otc"] = otc[d]["ratio"]
         tb = bal + otc[d]["bal"]
-        if d in tse:
-            res["ratio_all"] = round((tse[d]["ratio"]*tse[d]["bal"] + otc[d]["ratio"]*otc[d]["bal"]) / tb, 2)
-        res["margin_balance_all_yi"] = round(tb/1e5, 2)
-    res["margin_balance_yi"] = round(bal/1e5, 2)       # 仟元 → 億元 (上市)
-    res["margin_change_yi"] = round((bal-last)/1e5, 2)
+        res["ratio_all"] = round((w["ratio"] * bal + otc[d]["ratio"] * otc[d]["bal"]) / tb, 2)
+        res["margin_balance_all_yi"] = round(tb / 1e5, 2)
+    res["margin_balance_yi"] = round(bal / 1e5, 2)       # 仟元 → 億元 (上市)
+    res["margin_change_yi"] = round((bal - last) / 1e5, 2)
     hist = sorted((k, v["ratio"]) for k, v in tse.items() if k <= d)[-20:]
-    if d not in dict(hist): hist = (hist + [(d, res["ratio_tse"])])[-20:]
     res["history"] = [list(h) for h in hist]
     if otc: res["history_otc"] = [[k, otc[k]["ratio"]] for k, _ in hist if k in otc]
-    blend_history(res)
     res["generated_at"] = dt.datetime.now(TZ).isoformat(timespec="seconds")
     os.makedirs(os.path.join(ROOT, "data"), exist_ok=True)
     with open(os.path.join(ROOT, "data", "margin.json"), "w", encoding="utf-8") as f:
         json.dump(res, f, ensure_ascii=False, indent=1)
         f.write("\n")
     print(json.dumps({k: res[k] for k in ("date", "ratio_tse", "ratio_otc", "margin_balance_yi", "margin_change_yi", "source") if k in res}, ensure_ascii=False))
-
-def blend_history(res):
-    """WantGoo is often blocked here. Keep the sparkline from the previous file."""
-    path = os.path.join(ROOT, "data", "margin.json")
-    if len(res.get("history") or []) >= 5 or not os.path.exists(path):
-        return
-    try:
-        prev = json.load(open(path, encoding="utf-8"))
-    except Exception:
-        return
-    older = [h for h in prev.get("history") or [] if h[0] != res.get("date")]
-    if not older:
-        return
-    res["history"] = sorted(older + [[res["date"], res["ratio_tse"]]])[-20:]
-    if "history_otc" not in res and prev.get("history_otc"):
-        res["history_otc"] = [h for h in prev["history_otc"] if h[0] <= res["date"]][-20:]
 
 def snippet(r):
     ys = [h[1] for h in r["history"]]; lo, hi = min(ys+[130]) if False else min(ys), max(ys)
@@ -120,13 +105,15 @@ def snippet(r):
     ch = r["margin_change_yi"]; cls = "up" if ch > 0 else "dn" if ch < 0 else ""
     trend = "up" if len(ys) > 1 and ys[-1] >= ys[-2] else "dn"
     otc = f'　上櫃 {r["ratio_otc"]:.2f}%' if "ratio_otc" in r else ""
-    est = "估算" if "ESTIMATE" in r["source"] else "玩股網"
+    md = r["date"][5:].replace("-", "/")
+    if r.get("target_date") and r["date"] != r["target_date"]:
+        md += "（玩股網）"
     return f'''<style>.mg-spark{{display:block;margin:4px 0}}.mg-spark polyline{{fill:none;stroke:#4286f5;stroke-width:1.5}}</style>
 <div class="card"><div class="cn">融資維持率（上市）</div>
 <div class="cv num {trend}">{r["ratio_tse"]:.2f}%</div>
 <div class="cc num {cls}">融資餘額 {r["margin_balance_yi"]:,.2f} 億　{"+" if ch>0 else "−" if ch<0 else ""}{abs(ch):,.2f} 億</div>
 <svg class="mg-spark" width="100%" height="{H}" viewBox="0 0 {W} {H}" preserveAspectRatio="none"><polyline points="{pts}"/></svg>
-<div class="note">{r["date"][5:].replace("-","/")}{otc}｜近{n}日 {lo:.1f}–{hi:.1f}%｜130% 為追繳線｜來源：{est}</div></div>
+<div class="note">{md}{otc}｜近{n}日 {lo:.1f}–{hi:.1f}%｜130% 為追繳線｜資料：玩股網</div></div>
 '''
 
 if __name__ == "__main__": main()
