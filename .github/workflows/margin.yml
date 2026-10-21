@@ -1,8 +1,5 @@
 name: margin
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/margin.yml']
   schedule:
     # 21:50 and 23:30 Asia/Taipei = 13:50 and 15:30 UTC, Mon–Fri
     - cron: "50 13 * * 1-5"
