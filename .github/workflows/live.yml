@@ -1,5 +1,8 @@
 name: live-intraday
 on:
+  push:
+    branches: [main]
+    paths: ['live/**', '.github/workflows/live.yml']
   schedule:
     # UTC times. Taipei = UTC+8. Day session 08:45-13:45 TPE = 00:45-05:45 UTC (Mon-Fri)
     - cron: "*/5 0-5 * * 1-5"
