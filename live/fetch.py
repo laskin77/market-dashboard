@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Fetch intraday TAIEX + TX near-month 1-min series -> data/taiex.json, data/tx.json (stdlib only)."""
-import json, urllib.request, datetime, os, sys
+import json, urllib.request, urllib.parse, datetime, os, sys
+try:
+    from zoneinfo import ZoneInfo
+    NY = ZoneInfo("America/New_York")
+except Exception:
+    NY = datetime.timezone(datetime.timedelta(hours=-4))
 TZ = datetime.timezone(datetime.timedelta(hours=8))
 UA = {"User-Agent": "Mozilla/5.0"}
 # Default is repo-root data/ (this file lives in live/). OUT_DIR overrides, e.g. OUT_DIR=data.
@@ -178,11 +183,66 @@ def etf():
         raise RuntimeError("no etf quotes")
     return {"codes": ETFS, "quotes": out}
 
+US_SYMS = (("DJI", "^DJI", "道瓊"), ("GSPC", "^GSPC", "標普"), ("IXIC", "^IXIC", "那指"), ("SOX", "^SOX", "費半"), ("VIX", "^VIX", "VIX"))
+
+def ny_now():
+    return datetime.datetime.now(NY)
+
+def us_should_fetch(path):
+    t = ny_now()
+    hm = t.hour * 60 + t.minute
+    if t.weekday() <= 4 and (9 * 60 + 25) <= hm <= (16 * 60 + 10):
+        return True  # regular session, plus a few minutes around the bell
+    return not os.path.exists(path)
+
+def fetch_us(stamp):
+    """1-minute regular-session bars for the four indices, and VIX last. Yahoo chart."""
+    path = os.path.join(OUT, "us.json")
+    if os.environ.get("US") == "0" or not us_should_fetch(path):
+        print("us skip")
+        return
+    quotes, regular = {}, {}
+    for key, sym, name in US_SYMS:
+        try:
+            url = "https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=1m&range=1d&includePrePost=false" % urllib.parse.quote(sym)
+            r = get(url)["chart"]["result"][0]
+            meta, q = r["meta"], r["indicators"]["quote"][0]
+            pts = []
+            if key != "VIX":
+                for t, c in zip(r.get("timestamp") or [], q.get("close") or []):
+                    if c is not None:
+                        pts.append([int(t), round(float(c), 2)])
+            prev = meta.get("chartPreviousClose") or meta.get("previousClose")
+            last = pts[-1][1] if pts else meta.get("regularMarketPrice")
+            if last is not None:
+                last = round(float(last), 2)
+            chg = round(last - prev, 2) if last is not None and prev else None
+            pct = round(chg / prev * 100, 2) if chg is not None and prev else None
+            item = {"name": name, "symbol": sym, "prev": None if prev is None else round(float(prev), 2),
+                    "last": last, "chg": chg, "pct": pct, "updated": stamp}
+            if key != "VIX":
+                item["points"] = pts
+            quotes[key] = item
+            reg = (meta.get("currentTradingPeriod") or {}).get("regular") or {}
+            if reg.get("start") and not regular:
+                regular = reg
+            print("us", sym, last, "pts", len(pts))
+        except Exception as e:
+            print("us", sym, "FAILED", e, file=sys.stderr)
+    if not quotes:
+        print("us FAILED no quotes", file=sys.stderr)
+        return
+    ny = ny_now()
+    data = {"updated": stamp, "tz_offset": int(ny.utcoffset().total_seconds()),
+            "regular_start": regular.get("start"), "regular_end": regular.get("end"), "quotes": quotes}
+    json.dump(data, open(path, "w"), ensure_ascii=False, separators=(",", ":"))
+    print("us", len(quotes), "open_window", data["regular_start"], data["regular_end"])
+
 def write_live():
-    """One bundle for the page: data/live.json = {updated, taiex, tx, etf}."""
+    """One bundle for the page: data/live.json = {updated, taiex, tx, etf, us}."""
     stamp = datetime.datetime.now(TZ).isoformat(timespec="seconds")
     bundle = {"updated": stamp}
-    for name in ("taiex", "tx", "etf"):
+    for name in ("taiex", "tx", "etf", "us"):
         path = os.path.join(OUT, name + ".json")
         if not os.path.exists(path):
             continue
@@ -218,4 +278,8 @@ if __name__ == "__main__":
     hm = datetime.datetime.now(TZ).strftime("%H%M")
     if os.environ.get("STOCKS") == "1" or ("0900" <= hm <= "1345" and os.environ.get("STOCKS") != "0"):
         stocks(now)
+    try:
+        fetch_us(now)
+    except Exception as e:
+        print("us FAILED", e, file=sys.stderr)
     write_live()

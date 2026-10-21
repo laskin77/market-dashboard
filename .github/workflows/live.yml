@@ -8,9 +8,13 @@ on:
     - cron: "40 0 * * 1-5"
     - cron: "40 1-5 * * 1-5"
     # Night open 14:55 TPE = 06:55 UTC. Hourly safety 15:55 TPE through 04:55 next day
-    # (Fri 20:55 UTC is Sat 04:55 Taipei).
+    # (Fri 20:55 UTC is Sat 04:55 Taipei). US cash 09:30–16:00 New York falls inside this
+    # window (21:30–04:00 Taipei while the US is on daylight time).
     - cron: "55 6 * * 1-5"
     - cron: "55 7-20 * * 1-5"
+    # Start by 21:25 Taipei (13:25 UTC) Mon–Fri so a loop is up before the US open
+    # even if the earlier night job has already exited.
+    - cron: "25 13 * * 1-5"
   workflow_dispatch:
 permissions:
   contents: write

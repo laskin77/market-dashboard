@@ -21,8 +21,8 @@ h2{font-size:19px;color:#f2a900;border-left:4px solid #f2a900;padding-left:10px;
 table{width:100%;border-collapse:collapse;font-size:16px}th,td{padding:7px 6px;border-bottom:1px solid #1c2a42;text-align:left}th{color:#8a97ab;font-weight:400;font-size:14px}.r{text-align:right}
 footer{margin-top:32px;border-top:1px solid #1c2a42;padding:14px 0;color:#8a97ab;font-size:14px}
 @media(max-width:700px){.sec{grid-template-columns:1fr}.cards{grid-template-columns:1fr 1fr}.stks{grid-template-columns:1fr}.cv{font-size:20px}h1{font-size:22px}.kpi b{font-size:17px}table{font-size:15px}th,td{padding:6px 3px}}
-</style><style>.jump{position:sticky;top:0;z-index:50;display:flex;gap:6px;padding:8px 6px;background:rgba(10,14,22,.96);border-bottom:1px solid #2a3344;overflow:hidden}.jump a{flex:1;text-align:center;font-size:14px;padding:7px 2px;border-radius:6px;background:#1b2433;color:#e8c46a;text-decoration:none;white-space:nowrap}html{scroll-behavior:smooth}h2[id]{scroll-margin-top:56px}</style><style>.jump{background:linear-gradient(180deg,#141c2b,#0a0f18)!important;box-shadow:0 4px 12px rgba(0,0,0,.6)}.jump a{background:linear-gradient(180deg,#34425a 0%,#1d2738 55%,#141b28 100%)!important;border:1px solid #0b1019;border-top-color:#56657f;box-shadow:0 3px 0 #070b12,0 5px 8px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.18);text-shadow:0 1px 1px #000;font-weight:600;transition:transform .08s,box-shadow .08s}.jump a:active{transform:translateY(3px);box-shadow:0 0 0 #070b12,0 1px 3px rgba(0,0,0,.6),inset 0 2px 4px rgba(0,0,0,.5)}</style></head><body><div class="wrap">
-<header><h1>台股盤後報告</h1><div class="date num">2026-10-21（三）收盤</div></header><nav class="jump"><a href="#s0">即時</a><a href="#s5">查股</a><a href="#s1">盤勢</a><a href="#s2">強勢</a><a href="#s3">族群</a><a href="#s4">法人</a><a href="#s6">ETF</a></nav>
+</style><style>.jump{position:sticky;top:0;z-index:50;display:flex;gap:3px;padding:6px 4px;background:rgba(10,14,22,.96);border-bottom:1px solid #2a3344;overflow:hidden}.jump a{flex:1;min-width:0;text-align:center;font-size:12px;padding:6px 0;border-radius:6px;background:#1b2433;color:#e8c46a;text-decoration:none;white-space:nowrap}html{scroll-behavior:smooth}h2[id]{scroll-margin-top:56px}</style><style>.jump{background:linear-gradient(180deg,#141c2b,#0a0f18)!important;box-shadow:0 4px 12px rgba(0,0,0,.6)}.jump a{background:linear-gradient(180deg,#34425a 0%,#1d2738 55%,#141b28 100%)!important;border:1px solid #0b1019;border-top-color:#56657f;box-shadow:0 3px 0 #070b12,0 5px 8px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.18);text-shadow:0 1px 1px #000;font-weight:600;transition:transform .08s,box-shadow .08s}.jump a:active{transform:translateY(3px);box-shadow:0 0 0 #070b12,0 1px 3px rgba(0,0,0,.6),inset 0 2px 4px rgba(0,0,0,.5)}</style></head><body><div class="wrap">
+<header><h1>台股盤後報告</h1><div class="date num">2026-10-21（三）收盤</div></header><nav class="jump"><a href="#s0">即時</a><a href="#s7">美股</a><a href="#s5">查股</a><a href="#s1">盤勢</a><a href="#s2">強勢</a><a href="#s3">族群</a><a href="#s4">法人</a><a href="#s6">ETF</a></nav>
 <section class="live"><h2 id="s0">即時報價</h2>
 <style>.live .lk,.qs .lk{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;font-size:14px}.live .lk a,.qs .lk a{color:#7fb3ff;border:1px solid #1f2d47;padding:5px 9px;text-decoration:none}
 .live .jc{background:#0d1525;border:1px solid #1c2a42;padding:10px 12px;margin:0 0 10px;max-width:100%;overflow:hidden}
@@ -67,7 +67,39 @@ async function draw(id,src){
   }catch(err){meta.textContent="資料載入失敗";}
 }
 var gap=30000,lastSha="",loaded=false;
-function applyLive(d){if(d.taiex)draw("taiex",d.taiex);if(d.tx)draw("tx",d.tx);if(d.etf&&window.applyEtf)window.applyEtf(d.etf);loaded=true;}
+var ubox={};
+function drawLine(id,d,off,open){
+  var meta=document.getElementById(id+"-s"),price=document.getElementById(id+"-p");
+  if(!meta||!price)return;
+  try{
+    if(!d.points||!d.points.length)throw new Error("empty");
+    var last=d.last!=null?d.last:d.points[d.points.length-1][1],up=d.prev==null||last>=d.prev,col=up?"#e5383b":"#2bb673",b=ubox[id];
+    if(!b){
+      var ch=LightweightCharts.createChart(document.getElementById(id),{autoSize:true,layout:{attributionLogo:false,background:{color:"#0d1525"},textColor:"#8a97ab"},grid:{vertLines:{visible:false},horzLines:{color:"#1c2a42"}},timeScale:{timeVisible:true,secondsVisible:false,borderVisible:false},rightPriceScale:{borderVisible:false,scaleMargins:{top:0.18,bottom:0.08}}});
+      b=ubox[id]={ch:ch,line:ch.addLineSeries({lineWidth:2,priceLineVisible:false}),pl:null};
+    }
+    b.line.applyOptions({color:col});
+    b.line.setData(d.points.map(function(p){return {time:p[0]+off,value:p[1]}}));
+    if(b.pl)b.line.removePriceLine(b.pl);
+    if(d.prev!=null)b.pl=b.line.createPriceLine({price:d.prev,color:"#8a97ab",lineStyle:2,lineWidth:1,title:"平盤"});
+    b.ch.timeScale().fitContent();
+    var diff=d.prev!=null?last-d.prev:0,pct=d.prev?diff/d.prev*100:0;
+    price.innerHTML='<span class="'+(up?"up":"dn")+'">'+Number(last).toLocaleString(undefined,{maximumFractionDigits:2})+" "+(diff>=0?"▲":"▼")+Math.abs(diff).toFixed(2)+" ("+(pct>=0?"+":"")+pct.toFixed(2)+"%)</span>";
+    meta.textContent=(open?"盤中":"收盤")+" · 更新時間 "+upd(d.updated);
+  }catch(e){meta.textContent="資料載入失敗";}
+}
+function drawUS(us){
+  if(!us||!us.quotes)return;
+  var off=us.tz_offset||0,now=Date.now()/1000,open=!!(us.regular_start&&us.regular_end&&now>=us.regular_start&&now<us.regular_end);
+  ["dji","gspc","ixic","sox"].forEach(function(k){var q=us.quotes[k.toUpperCase()];if(q)drawLine("us-"+k,q,off,open)});
+  var v=us.quotes.VIX,vp=document.getElementById("vix-p"),vc=document.getElementById("vix-c"),vs=document.getElementById("vix-s");
+  if(!v||!vp)return;
+  var up=v.prev==null||v.last>=v.prev,diff=v.prev!=null?v.last-v.prev:0,pct=v.prev?diff/v.prev*100:0;
+  vp.className="cv num "+(up?"up":"dn");vp.textContent=Number(v.last).toFixed(2);
+  vc.className="cc num "+(up?"up":"dn");vc.textContent=(diff>=0?"▲":"▼")+Math.abs(diff).toFixed(2)+" ("+(pct>=0?"+":"")+pct.toFixed(2)+"%)";
+  vs.textContent=(open?"盤中":"收盤")+" · 更新時間 "+upd(v.updated||us.updated);
+}
+function applyLive(d){if(d.taiex)draw("taiex",d.taiex);if(d.tx)draw("tx",d.tx);if(d.etf&&window.applyEtf)window.applyEtf(d.etf);if(d.us)drawUS(d.us);loaded=true;}
 function tick(){
   fetch("https://api.github.com/repos/laskin77/market-dashboard/git/ref/heads/data?t="+Date.now(),{cache:"no-store"}).then(function(r){
     var remH=r.headers.get("X-RateLimit-Remaining"),reset=(+r.headers.get("X-RateLimit-Reset")||0)*1000;
@@ -83,6 +115,16 @@ function tick(){
 tick();
 })();
 </script>
+</section>
+<section class="live"><h2 id="s7">美股即時</h2>
+<style>.usg{display:grid;grid-template-columns:1fr 1fr;gap:8px}.usg .jc{min-width:0}.usg .c{height:128px}.usg .jt{font-size:15px}.usg .jp{font-size:13px;white-space:normal}.usg .vix{grid-column:1 / -1}.usg .vix .cv{font-size:22px}</style>
+<div class="usg">
+<div class="jc"><div class="jh"><b class="jt">道瓊</b><span id="us-dji-p" class="jp num"></span></div><div id="us-dji-s" class="js"></div><div id="us-dji" class="c"></div></div>
+<div class="jc"><div class="jh"><b class="jt">標普</b><span id="us-gspc-p" class="jp num"></span></div><div id="us-gspc-s" class="js"></div><div id="us-gspc" class="c"></div></div>
+<div class="jc"><div class="jh"><b class="jt">那指</b><span id="us-ixic-p" class="jp num"></span></div><div id="us-ixic-s" class="js"></div><div id="us-ixic" class="c"></div></div>
+<div class="jc"><div class="jh"><b class="jt">費半</b><span id="us-sox-p" class="jp num"></span></div><div id="us-sox-s" class="js"></div><div id="us-sox" class="c"></div></div>
+<div class="card vix"><div class="cn">VIX</div><div id="vix-p" class="cv num">—</div><div id="vix-c" class="cc num"></div><div id="vix-s" class="note">—</div></div>
+</div>
 </section>
 <section class="qs"><h2 id="s5">個股查詢</h2>
 <style>.qs form{display:flex;gap:6px;position:relative}.qs input{flex:1;min-width:0;font-size:17px;padding:8px 10px;background:#0d1525;color:#fff;border:1px solid #2a3a58;border-radius:6px}.qs button{font-size:16px;padding:8px 14px;background:#f2a900;color:#111;border:0;border-radius:6px}.qs .sg{position:absolute;top:44px;left:0;right:0;background:#0f1a2e;border:1px solid #2a3a58;z-index:40;max-height:260px;overflow-y:auto}.qs .sg div{padding:8px 10px;border-bottom:1px solid #1c2a42;cursor:pointer}.qs .sg div:hover{background:#1b2433}.qs .res{margin-top:10px;background:#0d1525;border:1px solid #1c2a42;padding:10px 12px;display:none}.qs .res .gt{margin-top:8px}.qs .tb{display:flex;gap:6px;margin:8px 0 4px}.qs .tb button{flex:1;background:#1b2433;color:#aab4c3;font-size:15px;padding:6px}.qs .tb button.on{background:#f2a900;color:#111}.qs .sc{height:280px}.qs .sd{height:120px}.qs .js{font-size:13px;color:#8a97ab;margin:4px 0}.qs .fb{margin-top:6px}</style>
