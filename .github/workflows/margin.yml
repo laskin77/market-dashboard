@@ -1,0 +1,29 @@
+name: margin
+on:
+  schedule:
+    # 21:50 and 23:30 Asia/Taipei = 13:50 and 15:30 UTC, Mon–Fri
+    - cron: "50 13 * * 1-5"
+    - cron: "30 15 * * 1-5"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  margin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      - name: fetch today's margin ratio
+        run: python3 live/margin.py
+      - name: commit data/margin.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898208+github-actions[bot]@users.noreply.github.com"
+          git add data/margin.json
+          git diff --cached --quiet && exit 0
+          git commit -m "data: margin $(TZ=Asia/Taipei date +%F)"
+          git pull --rebase origin main
+          git push origin HEAD:main
