@@ -20,7 +20,7 @@ permissions:
   contents: write
 concurrency:
   group: live
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   fetch:
     runs-on: ubuntu-latest
