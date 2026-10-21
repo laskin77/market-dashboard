@@ -132,6 +132,42 @@ def tx():
             "src": "taifex:getChartData1M", "prev": float(q["CRefPrice"]), "last": float(q["CLastPrice"] or 0),
             "points": pts}  # [epoch, close, vol, vwap]
 
+ETFS = ["0050", "0056", "00878", "00919", "00981A"]
+
+def etf():
+    """TWSE MIS quotes for ETF zone -> data/etf.json (Yahoo fallback per symbol)."""
+    out = {}
+    try:
+        ch = "|".join("tse_%s.tw" % c for c in ETFS)
+        d = get("https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=%s&json=1&delay=0" % ch)
+        for q in d.get("msgArray", []):
+            y = float(q["y"]); z = q.get("z", "-")
+            if z in ("-", "", None):  # no trade yet: use best bid/ask midpoint-free fallback = first bid
+                b = (q.get("b") or "-").split("_")[0]
+                z = b if b not in ("-", "") else None
+            last = float(z) if z else None
+            out[q["c"]] = {"name": q["n"], "last": last, "prev": y,
+                           "chg": round(last - y, 2) if last else None,
+                           "pct": round((last - y) / y * 100, 2) if last else None,
+                           "date": q.get("d"), "time": q.get("t"), "src": "twse-mis"}
+    except Exception as e:
+        print("etf mis FAILED", e, file=sys.stderr)
+    for c in ETFS:
+        if c in out and out[c]["last"]:
+            continue
+        try:
+            r = get("https://query1.finance.yahoo.com/v8/finance/chart/%s.TW?range=1d&interval=1d" % c)["chart"]["result"][0]["meta"]
+            last, y = r["regularMarketPrice"], r["chartPreviousClose"]
+            out[c] = {"name": out.get(c, {}).get("name", c), "last": last, "prev": y,
+                      "chg": round(last - y, 2), "pct": round((last - y) / y * 100, 2),
+                      "date": datetime.datetime.fromtimestamp(r["regularMarketTime"], TZ).strftime("%Y%m%d"),
+                      "time": datetime.datetime.fromtimestamp(r["regularMarketTime"], TZ).strftime("%H:%M:%S"), "src": "yahoo"}
+        except Exception as e:
+            print("etf yahoo", c, "FAILED", e, file=sys.stderr)
+    if not out:
+        raise RuntimeError("no etf quotes")
+    return {"codes": ETFS, "quotes": out}
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     now = datetime.datetime.now(TZ).isoformat(timespec="seconds")
@@ -142,6 +178,12 @@ if __name__ == "__main__":
             print(name, data.get("symbol", ""), len(data["points"]), data["points"][-1])
         except Exception as e:
             print(name, "FAILED", e, file=sys.stderr)  # keep previous file
+    try:
+        data = etf(); data["updated"] = now
+        json.dump(data, open(os.path.join(OUT, "etf.json"), "w"), ensure_ascii=False, separators=(",", ":"))
+        print("etf", len(data["quotes"]))
+    except Exception as e:
+        print("etf FAILED", e, file=sys.stderr)
     hm = datetime.datetime.now(TZ).strftime("%H%M")
     if os.environ.get("STOCKS") == "1" or ("0900" <= hm <= "1345" and os.environ.get("STOCKS") != "0"):
         stocks(now)
