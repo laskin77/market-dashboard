@@ -21,8 +21,8 @@ h2{font-size:19px;color:#f2a900;border-left:4px solid #f2a900;padding-left:10px;
 table{width:100%;border-collapse:collapse;font-size:16px}th,td{padding:7px 6px;border-bottom:1px solid #1c2a42;text-align:left}th{color:#8a97ab;font-weight:400;font-size:14px}.r{text-align:right}
 footer{margin-top:32px;border-top:1px solid #1c2a42;padding:14px 0;color:#8a97ab;font-size:14px}
 @media(max-width:700px){.sec{grid-template-columns:1fr}.cards{grid-template-columns:1fr 1fr}.stks{grid-template-columns:1fr}.cv{font-size:20px}h1{font-size:22px}.kpi b{font-size:17px}table{font-size:15px}th,td{padding:6px 3px}}
-</style><style>.jump{position:sticky;top:0;z-index:50;display:flex;gap:3px;padding:6px 4px;background:rgba(10,14,22,.96);border-bottom:1px solid #2a3344;overflow:hidden}.jump a{flex:1;min-width:0;text-align:center;font-size:12px;padding:6px 0;border-radius:6px;background:#1b2433;color:#e8c46a;text-decoration:none;white-space:nowrap}html{scroll-behavior:smooth}h2[id]{scroll-margin-top:56px}</style><style>.jump{background:linear-gradient(180deg,#141c2b,#0a0f18)!important;box-shadow:0 4px 12px rgba(0,0,0,.6)}.jump a{background:linear-gradient(180deg,#34425a 0%,#1d2738 55%,#141b28 100%)!important;border:1px solid #0b1019;border-top-color:#56657f;box-shadow:0 3px 0 #070b12,0 5px 8px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.18);text-shadow:0 1px 1px #000;font-weight:600;transition:transform .08s,box-shadow .08s}.jump a:active{transform:translateY(3px);box-shadow:0 0 0 #070b12,0 1px 3px rgba(0,0,0,.6),inset 0 2px 4px rgba(0,0,0,.5)}</style></head><body><div class="wrap">
-<header><h1>台股盤後報告</h1><div class="date num">2026-10-21（三）收盤</div></header><nav class="jump"><a href="#s0">即時</a><a href="#s7">美股</a><a href="#s5">查股</a><a href="#s1">盤勢</a><a href="#s2">強勢</a><a href="#s3">族群</a><a href="#s4">法人</a><a href="#s6">ETF</a></nav>
+</style><style>.jump{position:sticky;top:0;z-index:50;display:flex;gap:6px;padding:8px 6px;background:rgba(10,14,22,.96);border-bottom:1px solid #2a3344;overflow:hidden}.jump a{flex:1;text-align:center;font-size:14px;padding:7px 2px;border-radius:6px;background:#1b2433;color:#e8c46a;text-decoration:none;white-space:nowrap}#us-upd:not(:empty){margin-left:8px;font-size:12px;font-weight:400}html{scroll-behavior:smooth}h2[id]{scroll-margin-top:56px}</style><style>.jump{background:linear-gradient(180deg,#141c2b,#0a0f18)!important;box-shadow:0 4px 12px rgba(0,0,0,.6)}.jump a{background:linear-gradient(180deg,#34425a 0%,#1d2738 55%,#141b28 100%)!important;border:1px solid #0b1019;border-top-color:#56657f;box-shadow:0 3px 0 #070b12,0 5px 8px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.18);text-shadow:0 1px 1px #000;font-weight:600;transition:transform .08s,box-shadow .08s}.jump a:active{transform:translateY(3px);box-shadow:0 0 0 #070b12,0 1px 3px rgba(0,0,0,.6),inset 0 2px 4px rgba(0,0,0,.5)}</style></head><body><div class="wrap">
+<header><h1>台股盤後報告</h1><div class="date num">2026-10-21（三）收盤</div></header><nav class="jump"><a href="#s0">即時</a><a href="#s5">查股</a><a href="#s1">盤勢</a><a href="#s2">強勢</a><a href="#s3">族群</a><a href="#s4">法人</a><a href="#s6">ETF</a></nav>
 <section class="live"><h2 id="s0">即時報價</h2>
 <style>.live .lk,.qs .lk{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;font-size:14px}.live .lk a,.qs .lk a{color:#7fb3ff;border:1px solid #1f2d47;padding:5px 9px;text-decoration:none}
 .live .jc{background:#0d1525;border:1px solid #1c2a42;padding:10px 12px;margin:0 0 10px;max-width:100%;overflow:hidden}
@@ -66,40 +66,24 @@ async function draw(id,src){
     meta.textContent=(d.symbol?d.symbol+" "+(d.session==="night"?"夜盤":"日盤")+" · ":"")+"更新時間 "+upd(d.updated);
   }catch(err){meta.textContent="資料載入失敗";}
 }
-var gap=30000,lastSha="",loaded=false;
-var ubox={};
-function drawLine(id,d,off,open){
-  var meta=document.getElementById(id+"-s"),price=document.getElementById(id+"-p");
-  if(!meta||!price)return;
-  try{
-    if(!d.points||!d.points.length)throw new Error("empty");
-    var last=d.last!=null?d.last:d.points[d.points.length-1][1],up=d.prev==null||last>=d.prev,col=up?"#e5383b":"#2bb673",b=ubox[id];
-    if(!b){
-      var ch=LightweightCharts.createChart(document.getElementById(id),{autoSize:true,layout:{attributionLogo:false,background:{color:"#0d1525"},textColor:"#8a97ab"},grid:{vertLines:{visible:false},horzLines:{color:"#1c2a42"}},timeScale:{timeVisible:true,secondsVisible:false,borderVisible:false},rightPriceScale:{borderVisible:false,scaleMargins:{top:0.18,bottom:0.08}}});
-      b=ubox[id]={ch:ch,line:ch.addLineSeries({lineWidth:2,priceLineVisible:false}),pl:null};
-    }
-    b.line.applyOptions({color:col});
-    b.line.setData(d.points.map(function(p){return {time:p[0]+off,value:p[1]}}));
-    if(b.pl)b.line.removePriceLine(b.pl);
-    if(d.prev!=null)b.pl=b.line.createPriceLine({price:d.prev,color:"#8a97ab",lineStyle:2,lineWidth:1,title:"平盤"});
-    b.ch.timeScale().fitContent();
-    var diff=d.prev!=null?last-d.prev:0,pct=d.prev?diff/d.prev*100:0;
-    price.innerHTML='<span class="'+(up?"up":"dn")+'">'+Number(last).toLocaleString(undefined,{maximumFractionDigits:2})+" "+(diff>=0?"▲":"▼")+Math.abs(diff).toFixed(2)+" ("+(pct>=0?"+":"")+pct.toFixed(2)+"%)</span>";
-    meta.textContent=(open?"盤中":"收盤")+" · 更新時間 "+upd(d.updated);
-  }catch(e){meta.textContent="資料載入失敗";}
+var gap=30000,lastSha="",loaded=false,usOrig={};
+function paintUS(us){
+  var now=Date.now()/1000,open=!!(us&&us.regular_start&&us.regular_end&&now>=us.regular_start&&now<us.regular_end);
+  var stamp=document.getElementById("us-upd");
+  document.querySelectorAll("[data-us]").forEach(function(card){
+    var key=card.dataset.us,cv=card.querySelector(".cv"),cc=card.querySelector(".cc");
+    if(!cv||!cc)return;
+    if(!usOrig[key])usOrig[key]={t:cv.textContent,c:cc.textContent,tc:cv.className,cc:cc.className};
+    var q=open&&us.quotes&&us.quotes[key];
+    if(!q||q.last==null){cv.textContent=usOrig[key].t;cc.textContent=usOrig[key].c;cv.className=usOrig[key].tc;cc.className=usOrig[key].cc;return;}
+    var diff=q.prev!=null?q.last-q.prev:0,pct=q.prev?diff/q.prev*100:0,up=diff>=0,sign=up?"+":"−";
+    var mag=function(n){return Math.abs(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})};
+    cv.className="cv num "+(up?"up":"dn");cc.className="cc num "+(up?"up":"dn");
+    cv.textContent=mag(q.last);cc.textContent=sign+mag(diff)+"　"+sign+Math.abs(pct).toFixed(2)+"%";
+  });
+  if(stamp)stamp.textContent=open?upd(us.updated):"";
 }
-function drawUS(us){
-  if(!us||!us.quotes)return;
-  var off=us.tz_offset||0,now=Date.now()/1000,open=!!(us.regular_start&&us.regular_end&&now>=us.regular_start&&now<us.regular_end);
-  ["dji","gspc","ixic","sox"].forEach(function(k){var q=us.quotes[k.toUpperCase()];if(q)drawLine("us-"+k,q,off,open)});
-  var v=us.quotes.VIX,vp=document.getElementById("vix-p"),vc=document.getElementById("vix-c"),vs=document.getElementById("vix-s");
-  if(!v||!vp)return;
-  var up=v.prev==null||v.last>=v.prev,diff=v.prev!=null?v.last-v.prev:0,pct=v.prev?diff/v.prev*100:0;
-  vp.className="cv num "+(up?"up":"dn");vp.textContent=Number(v.last).toFixed(2);
-  vc.className="cc num "+(up?"up":"dn");vc.textContent=(diff>=0?"▲":"▼")+Math.abs(diff).toFixed(2)+" ("+(pct>=0?"+":"")+pct.toFixed(2)+"%)";
-  vs.textContent=(open?"盤中":"收盤")+" · 更新時間 "+upd(v.updated||us.updated);
-}
-function applyLive(d){if(d.taiex)draw("taiex",d.taiex);if(d.tx)draw("tx",d.tx);if(d.etf&&window.applyEtf)window.applyEtf(d.etf);if(d.us)drawUS(d.us);loaded=true;}
+function applyLive(d){if(d.taiex)draw("taiex",d.taiex);if(d.tx)draw("tx",d.tx);if(d.etf&&window.applyEtf)window.applyEtf(d.etf);if(d.us)paintUS(d.us);loaded=true;}
 function tick(){
   fetch("https://api.github.com/repos/laskin77/market-dashboard/git/ref/heads/data?t="+Date.now(),{cache:"no-store"}).then(function(r){
     var remH=r.headers.get("X-RateLimit-Remaining"),reset=(+r.headers.get("X-RateLimit-Reset")||0)*1000;
@@ -115,16 +99,6 @@ function tick(){
 tick();
 })();
 </script>
-</section>
-<section class="live"><h2 id="s7">美股即時</h2>
-<style>.usg{display:grid;grid-template-columns:1fr 1fr;gap:8px}.usg .jc{min-width:0}.usg .c{height:128px}.usg .jt{font-size:15px}.usg .jp{font-size:13px;white-space:normal}.usg .vix{grid-column:1 / -1}.usg .vix .cv{font-size:22px}</style>
-<div class="usg">
-<div class="jc"><div class="jh"><b class="jt">道瓊</b><span id="us-dji-p" class="jp num"></span></div><div id="us-dji-s" class="js"></div><div id="us-dji" class="c"></div></div>
-<div class="jc"><div class="jh"><b class="jt">標普</b><span id="us-gspc-p" class="jp num"></span></div><div id="us-gspc-s" class="js"></div><div id="us-gspc" class="c"></div></div>
-<div class="jc"><div class="jh"><b class="jt">那指</b><span id="us-ixic-p" class="jp num"></span></div><div id="us-ixic-s" class="js"></div><div id="us-ixic" class="c"></div></div>
-<div class="jc"><div class="jh"><b class="jt">費半</b><span id="us-sox-p" class="jp num"></span></div><div id="us-sox-s" class="js"></div><div id="us-sox" class="c"></div></div>
-<div class="card vix"><div class="cn">VIX</div><div id="vix-p" class="cv num">—</div><div id="vix-c" class="cc num"></div><div id="vix-s" class="note">—</div></div>
-</div>
 </section>
 <section class="qs"><h2 id="s5">個股查詢</h2>
 <style>.qs form{display:flex;gap:6px;position:relative}.qs input{flex:1;min-width:0;font-size:17px;padding:8px 10px;background:#0d1525;color:#fff;border:1px solid #2a3a58;border-radius:6px}.qs button{font-size:16px;padding:8px 14px;background:#f2a900;color:#111;border:0;border-radius:6px}.qs .sg{position:absolute;top:44px;left:0;right:0;background:#0f1a2e;border:1px solid #2a3a58;z-index:40;max-height:260px;overflow-y:auto}.qs .sg div{padding:8px 10px;border-bottom:1px solid #1c2a42;cursor:pointer}.qs .sg div:hover{background:#1b2433}.qs .res{margin-top:10px;background:#0d1525;border:1px solid #1c2a42;padding:10px 12px;display:none}.qs .res .gt{margin-top:8px}.qs .tb{display:flex;gap:6px;margin:8px 0 4px}.qs .tb button{flex:1;background:#1b2433;color:#aab4c3;font-size:15px;padding:6px}.qs .tb button.on{background:#f2a900;color:#111}.qs .sc{height:280px}.qs .sd{height:120px}.qs .js{font-size:13px;color:#8a97ab;margin:4px 0}.qs .fb{margin-top:6px}</style>
@@ -187,7 +161,7 @@ document.addEventListener("click",function(e){if(!e.target.closest("#qf"))G.hidd
 </section>
 
 <div class="summary">台股反彈 594 點，資金集中 AI 硬體材料（銅箔基板、PCB 載板、被動元件），低軌衛星與塑化強勢；半導體近期資金流出。</div>
-<h2 id="s1">一、今日盤勢</h2><div class="grp"><div class="gt">台股</div><div class="cards"><div class="card"><div class="cn">加權指數</div><div class="cv num up">46,887.77</div><div class="cc num up">+594.84　+1.28%</div><div class="note">成交值約 8,331.91 億元</div></div><div class="card"><div class="cn">櫃買指數</div><div class="cv num up">395.42</div><div class="cc num up">+7.54　+1.94%</div></div></div></div><style>#mg .cards{grid-template-columns:1fr}#mg .card{min-width:0}#mg .cc,#mg .note{overflow-wrap:anywhere}.mg-spark{display:block;margin:4px 0;max-width:100%}.mg-spark polyline{fill:none;stroke:#4286f5;stroke-width:1.5}</style><div class="grp" id="mg"><div class="gt">融資</div><div class="cards"><div class="card" id="mgcard"><div class="cn">融資維持率（上市）</div><div class="cv num dn">178.93%</div><svg class="mg-spark" width="100%" height="36" viewBox="0 0 160 36" preserveAspectRatio="none"><polyline points="0.0,15.6 8.9,13.1 17.8,12.7 26.7,12.1 35.6,15.1 44.4,12.4 53.3,10.2 62.2,7.4 71.1,2.0 80.0,4.3 88.9,4.6 97.8,7.3 106.7,8.7 115.6,17.8 124.4,15.4 133.3,29.8 142.2,27.5 151.1,30.5 160.0,34.0"/></svg><div class="note">10/20（玩股網）　上櫃 173.31%｜近19日 178.9–200.7%｜130% 為追繳線｜資料：玩股網</div></div></div></div><script>(function(){function paint(r){var el=document.getElementById("mgcard");if(!el||r.ratio_tse==null)return;if((r.source||"").indexOf("ESTIMATE")>=0)return;var ys=(r.history||[]).map(function(h){return +h[1]});if(!ys.length)ys=[+r.ratio_tse];var lo=Math.min.apply(null,ys),hi=Math.max.apply(null,ys),W=160,H=36,n=ys.length,rng=(hi-lo)||1;var pts=ys.map(function(y,i){return (i*W/(n>1?n-1:1)).toFixed(1)+","+(H-2-(y-lo)/rng*(H-4)).toFixed(1)}).join(" ");var trend=n>1&&ys[n-1]>=ys[n-2]?"up":"dn";var otc=r.ratio_otc!=null?"　上櫃 "+(+r.ratio_otc).toFixed(2)+"%":"";var md=(r.date||"").slice(5).replace("-","/");if(r.target_date&&r.date&&r.date!==r.target_date)md+="（玩股網）";var bal="";if(r.margin_balance_yi!=null&&r.margin_change_yi!=null){var ch=+r.margin_change_yi,cls=ch>0?"up":ch<0?"dn":"",sign=ch>0?"+":ch<0?"−":"";var num=function(x){return (+x).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})};bal='<div class="cc num '+cls+'">融資餘額 '+num(r.margin_balance_yi)+' 億　'+sign+num(Math.abs(ch))+' 億</div>';}el.innerHTML='<div class="cn">融資維持率（上市）</div><div class="cv num '+trend+'">'+Number(r.ratio_tse).toFixed(2)+'%</div>'+bal+'<svg class="mg-spark" width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none"><polyline points="'+pts+'"/></svg><div class="note">'+md+otc+'｜近'+n+'日 '+lo.toFixed(1)+'–'+hi.toFixed(1)+'%｜130% 為追繳線｜資料：玩股網</div>'}fetch("data/margin.json?t="+Date.now()).then(function(r){if(!r.ok)throw 0;return r.json()}).then(paint).catch(function(){})})();</script><div class="grp"><div class="gt">美股（美東 10/20）</div><div class="cards"><div class="card"><div class="cn">道瓊</div><div class="cv num up">52,495.88</div><div class="cc num up">+529.85　+1.02%</div></div><div class="card"><div class="cn">標普500</div><div class="cv num up">7,712.57</div><div class="cc num up">+21.84　+0.28%</div></div><div class="card"><div class="cn">那斯達克</div><div class="cv num dn">26,424.82</div><div class="cc num dn">−6.07　−0.02%</div></div><div class="card"><div class="cn">費城半導體</div><div class="cv num dn">11,283.81</div><div class="cc num dn">−32.53　−0.29%</div></div></div></div><div class="grp"><div class="gt">商品與波動（美東 10/20）</div><div class="cards"><div class="card"><div class="cn">黃金期貨</div><div class="cv num dn">4,136.60</div><div class="cc num dn">−16.00　−0.56%</div></div><div class="card"><div class="cn">布蘭特原油</div><div class="cv num dn">109.27</div><div class="cc num dn">−0.28　−0.26%</div></div><div class="card"><div class="cn">VIX</div><div class="cv num dn">17.31</div><div class="cc num dn">−1.13　−6.13%</div></div></div></div><div class="grp"><div class="gt">期貨</div><div class="cards"><div class="card"><div class="cn">台指期夜盤</div><div class="cv num up">46,975</div><div class="cc num up">+634　+1.37%</div><div class="note">10/20 夜盤</div></div></div></div>
+<h2 id="s1">一、今日盤勢</h2><div class="grp"><div class="gt">台股</div><div class="cards"><div class="card"><div class="cn">加權指數</div><div class="cv num up">46,887.77</div><div class="cc num up">+594.84　+1.28%</div><div class="note">成交值約 8,331.91 億元</div></div><div class="card"><div class="cn">櫃買指數</div><div class="cv num up">395.42</div><div class="cc num up">+7.54　+1.94%</div></div></div></div><style>#mg .cards{grid-template-columns:1fr}#mg .card{min-width:0}#mg .cc,#mg .note{overflow-wrap:anywhere}.mg-spark{display:block;margin:4px 0;max-width:100%}.mg-spark polyline{fill:none;stroke:#4286f5;stroke-width:1.5}</style><div class="grp" id="mg"><div class="gt">融資</div><div class="cards"><div class="card" id="mgcard"><div class="cn">融資維持率（上市）</div><div class="cv num dn">178.93%</div><svg class="mg-spark" width="100%" height="36" viewBox="0 0 160 36" preserveAspectRatio="none"><polyline points="0.0,15.6 8.9,13.1 17.8,12.7 26.7,12.1 35.6,15.1 44.4,12.4 53.3,10.2 62.2,7.4 71.1,2.0 80.0,4.3 88.9,4.6 97.8,7.3 106.7,8.7 115.6,17.8 124.4,15.4 133.3,29.8 142.2,27.5 151.1,30.5 160.0,34.0"/></svg><div class="note">10/20（玩股網）　上櫃 173.31%｜近19日 178.9–200.7%｜130% 為追繳線｜資料：玩股網</div></div></div></div><script>(function(){function paint(r){var el=document.getElementById("mgcard");if(!el||r.ratio_tse==null)return;if((r.source||"").indexOf("ESTIMATE")>=0)return;var ys=(r.history||[]).map(function(h){return +h[1]});if(!ys.length)ys=[+r.ratio_tse];var lo=Math.min.apply(null,ys),hi=Math.max.apply(null,ys),W=160,H=36,n=ys.length,rng=(hi-lo)||1;var pts=ys.map(function(y,i){return (i*W/(n>1?n-1:1)).toFixed(1)+","+(H-2-(y-lo)/rng*(H-4)).toFixed(1)}).join(" ");var trend=n>1&&ys[n-1]>=ys[n-2]?"up":"dn";var otc=r.ratio_otc!=null?"　上櫃 "+(+r.ratio_otc).toFixed(2)+"%":"";var md=(r.date||"").slice(5).replace("-","/");if(r.target_date&&r.date&&r.date!==r.target_date)md+="（玩股網）";var bal="";if(r.margin_balance_yi!=null&&r.margin_change_yi!=null){var ch=+r.margin_change_yi,cls=ch>0?"up":ch<0?"dn":"",sign=ch>0?"+":ch<0?"−":"";var num=function(x){return (+x).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})};bal='<div class="cc num '+cls+'">融資餘額 '+num(r.margin_balance_yi)+' 億　'+sign+num(Math.abs(ch))+' 億</div>';}el.innerHTML='<div class="cn">融資維持率（上市）</div><div class="cv num '+trend+'">'+Number(r.ratio_tse).toFixed(2)+'%</div>'+bal+'<svg class="mg-spark" width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none"><polyline points="'+pts+'"/></svg><div class="note">'+md+otc+'｜近'+n+'日 '+lo.toFixed(1)+'–'+hi.toFixed(1)+'%｜130% 為追繳線｜資料：玩股網</div>'}fetch("data/margin.json?t="+Date.now()).then(function(r){if(!r.ok)throw 0;return r.json()}).then(paint).catch(function(){})})();</script><div class="grp"><div class="gt">美股（美東 10/20）<span id="us-upd" class="num"></span></div><div class="cards"><div class="card" data-us="DJI"><div class="cn">道瓊</div><div class="cv num up">52,495.88</div><div class="cc num up">+529.85　+1.02%</div></div><div class="card" data-us="GSPC"><div class="cn">標普500</div><div class="cv num up">7,712.57</div><div class="cc num up">+21.84　+0.28%</div></div><div class="card" data-us="IXIC"><div class="cn">那斯達克</div><div class="cv num dn">26,424.82</div><div class="cc num dn">−6.07　−0.02%</div></div><div class="card" data-us="SOX"><div class="cn">費城半導體</div><div class="cv num dn">11,283.81</div><div class="cc num dn">−32.53　−0.29%</div></div></div></div><div class="grp"><div class="gt">商品與波動（美東 10/20）</div><div class="cards"><div class="card"><div class="cn">黃金期貨</div><div class="cv num dn">4,136.60</div><div class="cc num dn">−16.00　−0.56%</div></div><div class="card"><div class="cn">布蘭特原油</div><div class="cv num dn">109.27</div><div class="cc num dn">−0.28　−0.26%</div></div><div class="card" data-us="VIX"><div class="cn">VIX</div><div class="cv num dn">17.31</div><div class="cc num dn">−1.13　−6.13%</div></div></div></div><div class="grp"><div class="gt">期貨</div><div class="cards"><div class="card"><div class="cn">台指期夜盤</div><div class="cv num up">46,975</div><div class="cc num up">+634　+1.37%</div><div class="note">10/20 夜盤</div></div></div></div>
 <h2 id="s2">二、短線強勢題材股</h2><div class="stks"><div class="stk"><div class="sh"><div><span class="sn">南亞</span> <span class="code num">1303</span> <span class="mk">上市</span></div>
 <div class="sp"><span class="num up big">320.50</span> <span class="num up">+24.50　+8.28%</span></div></div>
 <div class="row"><span class="lbl">近5日</span><span class="num dn">−8.17%</span></div>
