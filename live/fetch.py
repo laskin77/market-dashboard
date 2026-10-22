@@ -95,38 +95,109 @@ def universe():
 def stock_intraday(code, mkt):
     r = get("https://query1.finance.yahoo.com/v8/finance/chart/%s.%s?interval=1m&range=1d" % (code, mkt))["chart"]["result"][0]
     q = r["indicators"]["quote"][0]; pts = []
-    for t, c, v in zip(r.get("timestamp") or [], q["close"], q["volume"]):
-        if c is not None: pts.append([t, round(c, 2), v or 0])
+    for t, c, v in zip(r.get("timestamp") or [], q.get("close") or [], q.get("volume") or []):
+        if c is not None: pts.append([t, round(float(c), 2), v or 0])
     return {"code": code, "mkt": mkt, "prev": r["meta"].get("chartPreviousClose"), "points": pts}  # [epoch, close, vol]
+
+def mis_price(q):
+    """Last trade. MIS leaves z as '-' between prints and keeps the trade in trade.z."""
+    z = q.get("z")
+    if z not in (None, "-", ""):
+        return float(z)
+    tr = q.get("trade") or {}
+    if isinstance(tr, str):
+        try:
+            tr = json.loads(tr)
+        except ValueError:
+            tr = {}
+    tz = tr.get("z") if isinstance(tr, dict) else None
+    if tz not in (None, "-", ""):
+        return float(tz)
+    return None
+
+def mis_last(sel):
+    """Live last/prev from TWSE MIS. Yahoo's 1-minute bars can be empty during the session."""
+    out = {}
+    for i in range(0, len(sel), 40):
+        chunk = sel[i:i + 40]
+        ch = "|".join(("tse_" if m == "TW" else "otc_") + c + ".tw" for c, m in chunk)
+        try:
+            d = get("https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=%s&json=1&delay=0" % ch)
+        except Exception as e:
+            print("mis batch failed:", e, file=sys.stderr)
+            continue
+        for q in d.get("msgArray") or []:
+            try:
+                last = mis_price(q)
+                if last is None:
+                    continue
+                prev = float(q["y"]) if q.get("y") not in (None, "-", "") else None
+                t = int(q["tlong"]) // 1000
+            except (TypeError, ValueError):
+                continue
+            out[q["c"]] = {"last": round(last, 2), "prev": prev, "t": t}
+    return out
 
 def stocks(now):
     from concurrent.futures import ThreadPoolExecutor
     d = os.path.join(OUT, "intraday"); os.makedirs(d, exist_ok=True)
-    sel = universe(); ok = []
+    sel = universe()
+    quotes = mis_last(sel)
     def one(cm):
+        code, mkt = cm
+        path = os.path.join(d, code + ".json")
+        x = None
         try:
-            x = stock_intraday(*cm)
-            if not x["points"]: return None
-            x["updated"] = now
-            json.dump(x, open(os.path.join(d, cm[0] + ".json"), "w"), separators=(",", ":"))
-            return cm[0]
+            y = stock_intraday(code, mkt)
+            if y["points"]:
+                x = y
         except Exception as e:
-            print("stock", cm[0], "failed:", e, file=sys.stderr)
+            print("stock", code, "yahoo:", e, file=sys.stderr)
+        q = quotes.get(code)
+        if q and (x is None or not x["points"] or q["t"] > x["points"][-1][0] + 30):
+            # Yahoo has no bar for this print. Keep appending MIS lasts on this runner.
+            base = x
+            if base is None and os.path.exists(path):
+                try:
+                    base = json.load(open(path, encoding="utf-8"))
+                except Exception:
+                    base = None
+            pts = list((base or {}).get("points") or [])
+            if pts and q["t"] > pts[-1][0] + 6 * 3600:
+                pts = []
+            if not pts or q["t"] > pts[-1][0] + 20:
+                pts.append([q["t"], q["last"], 0])
+            prev = q["prev"] if q["prev"] is not None else (base or {}).get("prev")
+            x = {"code": code, "mkt": mkt, "prev": prev, "points": pts}
+        if not x or not x["points"]:
+            return None
+        x["updated"] = now
+        json.dump(x, open(path, "w"), separators=(",", ":"))
+        return code
     with ThreadPoolExecutor(8) as ex:
         ok = [c for c in ex.map(one, sel) if c]
     json.dump({"updated": now, "codes": sorted(ok)}, open(os.path.join(d, "index.json"), "w"), separators=(",", ":"))
-    print("intraday stocks", len(ok), "/", len(sel))
+    print("intraday stocks", len(ok), "/", len(sel), "mis", len(quotes))
 
 def tx():
     base = "https://mis.taifex.com.tw/futures/api/"
+    tnow = datetime.datetime.now(TZ)
+    hm = tnow.hour * 60 + tnow.minute
+    day_sess = tnow.weekday() <= 4 and (8 * 60 + 45) <= hm <= (13 * 60 + 45)
+    # Night quotes keep yesterday's last price after 05:00, so the clock chooses the
+    # session. Day contracts end in -F (TXFK6-F); night contracts end in -M.
+    # TXF-S is the spot index and is not the futures chart.
+    order = (("0", "-F"), ("1", "-M")) if day_sess else (("1", "-M"), ("0", "-F"))
     sym = None
-    for mt in ("1", "0"):  # 1 = night (after-hours), 0 = regular; pick whichever is live
+    for mt, suffix in order:
         ql = get(base + "getQuoteList", {"MarketType": mt, "SymbolType": "F", "KindID": "1", "CID": "TXF",
                "ExpireMonth": "", "RowSize": "全部", "PageNo": "", "SortColumn": "", "AscDesc": "A"})["RtData"]["QuoteList"]
-        c = [q for q in ql if q["SymbolID"] != "TXF-P" and "/" not in q["SymbolID"]]
-        if c and c[0]["CLastPrice"]:
-            sym = c[0]["SymbolID"]; break  # first contract = near month
-    if not sym: sym = c[0]["SymbolID"]
+        c = [q for q in ql if "/" not in q.get("SymbolID", "") and q["SymbolID"].endswith(suffix) and q.get("CLastPrice")]
+        if c:
+            sym = c[0]["SymbolID"]
+            break
+    if not sym:
+        raise RuntimeError("no TX contract")
     d = get(base + "getChartData1M", {"SymbolID": sym})["RtData"]
     q, day = d["Quote"], d["Quote"]["CDate"]
     pts, cum_pv, cum_v = [], 0.0, 0
@@ -156,11 +227,11 @@ def etf():
         ch = "|".join("tse_%s.tw" % c for c in ETFS)
         d = get("https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=%s&json=1&delay=0" % ch)
         for q in d.get("msgArray", []):
-            y = float(q["y"]); z = q.get("z", "-")
-            if z in ("-", "", None):  # no trade yet: use best bid/ask midpoint-free fallback = first bid
+            y = float(q["y"])
+            last = mis_price(q)
+            if last is None:  # no trade yet: first bid
                 b = (q.get("b") or "-").split("_")[0]
-                z = b if b not in ("-", "") else None
-            last = float(z) if z else None
+                last = float(b) if b not in ("-", "") else None
             out[q["c"]] = {"name": q["n"], "last": last, "prev": y,
                            "chg": round(last - y, 2) if last else None,
                            "pct": round((last - y) / y * 100, 2) if last else None,
