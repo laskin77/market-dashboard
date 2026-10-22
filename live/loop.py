@@ -60,6 +60,9 @@ def publish(out_dir):
     intra = os.path.join(out_dir, "intraday")
     if os.path.isdir(intra) and os.listdir(intra):
         shutil.copytree(intra, os.path.join(work, "intraday"))
+    close = os.path.join(out_dir, "close.json")
+    if os.path.exists(close):
+        shutil.copy(close, os.path.join(work, "close.json"))
     subprocess.check_call(["git", "init", "-q", "-b", "data"], cwd=work)
     subprocess.check_call(["git", "config", "user.email", "41898208+github-actions[bot]@users.noreply.github.com"], cwd=work)
     subprocess.check_call(["git", "config", "user.name", "github-actions[bot]"], cwd=work)
@@ -72,7 +75,35 @@ def publish(out_dir):
     print("pushed", sha, stamp, flush=True)
     return True
 
+def maybe_close(out_dir):
+    """After the cash close, rebuild the static report once official files are up.
+
+    GitHub cron often skips a slot. The night loop is already running by 15:00,
+    so it retries every 10 minutes from 14:30 to 20:00. close.py itself no-ops
+    once today's file is complete, and again until T86/BFI82U arrive after 16:30.
+    """
+    t = now()
+    if t.weekday() > 4:
+        return
+    hm = t.hour * 60 + t.minute
+    if hm < 14 * 60 + 30 or hm > 20 * 60:
+        return
+    stamp_path = "/tmp/mkt-close-stamp"
+    try:
+        if time.time() - float(open(stamp_path).read()) < 600:
+            return
+    except Exception:
+        pass
+    with open(stamp_path, "w") as f:
+        f.write(str(time.time()))
+    env = os.environ.copy()
+    env["OUT_DIR"] = out_dir
+    print("close rebuild", t.isoformat(timespec="seconds"), flush=True)
+    subprocess.call([sys.executable, os.path.join(ROOT, "live", "close.py")], env=env)
+
+
 def cycle(out_dir):
+    maybe_close(out_dir)
     env = os.environ.copy()
     env["OUT_DIR"] = out_dir
     t = now()

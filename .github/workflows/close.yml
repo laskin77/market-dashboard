@@ -1,0 +1,39 @@
+name: close
+on:
+  schedule:
+    # Taipei = UTC+8. GitHub drops single crons, so each publish window has retries.
+    # 14:40 builds 盤勢 / 強勢 / 族群 / ETF as soon as MI_INDEX and TPEx are up.
+    # 16:45 and 17:30 rebuild once T86 and BFI82U are published. Later slots retry.
+    - cron: "40 6 * * 1-5"    # 14:40
+    - cron: "55 6 * * 1-5"    # 14:55
+    - cron: "20 7 * * 1-5"    # 15:20
+    - cron: "45 8 * * 1-5"    # 16:45
+    - cron: "5 9 * * 1-5"     # 17:05
+    - cron: "30 9 * * 1-5"    # 17:30
+    - cron: "15 10 * * 1-5"   # 18:15
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: close
+  cancel-in-progress: false
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      - name: rebuild close report
+        run: python3 live/close.py
+      - name: commit close JSON
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898208+github-actions[bot]@users.noreply.github.com"
+          git add data/close.json data/etf.json data/etf_div.json
+          git diff --cached --quiet && exit 0
+          git commit -m "data: close $(TZ=Asia/Taipei date +%F)"
+          git pull --rebase origin main
+          git push origin HEAD:main
