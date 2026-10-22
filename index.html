@@ -46,6 +46,12 @@ async function draw(id,src){
   var meta=document.getElementById(id+"-s"),price=document.getElementById(id+"-p");
   try{
     var d=typeof src==="string"?await (await fetch(src+(src.indexOf("?")<0?"?t="+Date.now():""))).json():src;
+    if(id==="taiex"&&d.points&&d.points.length){
+      var dayOf=function(t){return new Date((t+TZ)*1000).toISOString().slice(0,10)};
+      var lastDay=dayOf(d.points[d.points.length-1][0]);
+      var kept=d.points.filter(function(p){return dayOf(p[0])===lastDay});
+      if(kept.length)d.points=kept;
+    }
     if(!d.points||!d.points.length) throw new Error("empty");
     var last=d.points[d.points.length-1][1],up=last>=d.prev,col=up?"#e5383b":"#2bb673",b=box[id];
     if(!b){

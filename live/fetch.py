@@ -30,43 +30,299 @@ def ts(day, hhmmss):  # day 'YYYYMMDD', hhmmss 'HH:MM:SS' or 'HHMMSS' -> epoch (
             day = (datetime.datetime.strptime(day, "%Y%m%d") + datetime.timedelta(days=1)).strftime("%Y%m%d")
     return int(datetime.datetime.strptime(day + s[:6], "%Y%m%d%H%M%S").replace(tzinfo=TZ).timestamp())
 
+def fnum(x):
+    if x in (None, "-", ""):
+        return None
+    try:
+        return float(str(x).replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+
+def session_day(now=None):
+    """Trading day shown on the 加權 chart. Before 09:00 Taipei, that is the previous weekday."""
+    now = now or datetime.datetime.now(TZ)
+    if now.hour < 9:
+        prev = now - datetime.timedelta(days=1)
+        while prev.weekday() >= 5:
+            prev -= datetime.timedelta(days=1)
+        return prev.strftime("%Y%m%d")
+    return now.strftime("%Y%m%d")
+
+def epoch_day(t):
+    return datetime.datetime.fromtimestamp(int(t), TZ).strftime("%Y%m%d")
+
+def in_day_session(t, day):
+    return ts(day, "090000") <= int(t) <= ts(day, "133059")
+
+# MIS index field m is cumulative turnover. One unit lines up with about 1e5 TWD
+# (cnyes per-minute volume is in TWD). The scale cancels inside a pure-MIS average;
+# it only matters when a backfill bar's TWD volume shares the same 均價.
+MIS_M_TO_TWD = 100000
+
+def mis_index():
+    q = get("https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&json=1&delay=0")["msgArray"][0]
+    t = int(q["tlong"]) // 1000 if q.get("tlong") else None
+    if t:
+        t -= t % 60
+    return {"day": str(q.get("d") or ""), "z": fnum(q.get("z")), "t": t,
+            "y": fnum(q.get("y")), "o": fnum(q.get("o")), "m": fnum(q.get("m"))}
+
+def fetch_official_index(day):
+    """MI_5MINS_INDEX with today's date. The undated endpoint keeps serving yesterday until it rolls."""
+    stamp = int(datetime.datetime.now(TZ).timestamp())
+    urls = [
+        "https://www.twse.com.tw/rwd/zh/TAIEX/MI_5MINS_INDEX?response=json&date=%s&_=%d" % (day, stamp),
+        "https://www.twse.com.tw/exchangeReport/MI_5MINS_INDEX?response=json&date=%s&_=%d" % (day, stamp),
+        "https://www.twse.com.tw/rwd/zh/TAIEX/MI_5MINS_INDEX?response=json&_=%d" % stamp,
+    ]
+    for url in urls:
+        try:
+            d = get(url)
+        except Exception as e:
+            print("MI_5MINS_INDEX failed:", e, file=sys.stderr)
+            continue
+        if d.get("stat") != "OK" or str(d.get("date") or "") != str(day) or not d.get("data"):
+            print("MI_5MINS_INDEX skip", d.get("date"), d.get("stat"), file=sys.stderr)
+            continue
+        return d
+    return None
+
+def official_points(d, day):
+    prev = fnum(d["data"][0][1]) if d.get("data") else None  # 09:00:00 row is the previous close
+    m = {}
+    for row in d["data"]:
+        try:
+            t = ts(day, row[0])
+        except ValueError:
+            continue
+        px = fnum(row[1])
+        if px is None or not in_day_session(t, day) or epoch_day(t) != str(day):
+            continue
+        m[t - t % 60] = px  # last print in the minute
+    pts = [[t, round(v, 2), None, None] for t, v in sorted(m.items())]
+    return pts, prev
+
+def fetch_official_vwap(day, index_rows):
+    """均價: weight each 5-sec print by Δ成交金額. Refuse any file that is not this trading day."""
+    idx5 = {}
+    for r in index_rows:
+        px = fnum(r[1])
+        if px is not None:
+            idx5[r[0]] = px
+    stamp = int(datetime.datetime.now(TZ).timestamp())
+    urls = [
+        "https://www.twse.com.tw/rwd/zh/afterTrading/MI_5MINS?response=json&date=%s&_=%d" % (day, stamp),
+        "https://www.twse.com.tw/rwd/zh/afterTrading/MI_5MINS?response=json&_=%d" % stamp,
+    ]
+    a = None
+    for url in urls:
+        try:
+            got = get(url)
+        except Exception as e:
+            print("MI_5MINS failed:", e, file=sys.stderr)
+            continue
+        if got.get("stat") == "OK" and str(got.get("date") or "") == str(day) and got.get("data"):
+            a = got
+            break
+        print("MI_5MINS skip", got.get("date"), got.get("stat"), file=sys.stderr)
+    if not a:
+        return {}
+    pa, spv, sa, vw = 0.0, 0.0, 0.0, {}
+    for r in a["data"]:
+        amt = fnum(r[7])
+        if amt is None:
+            continue
+        da, pa = amt - pa, amt
+        if r[0] in idx5 and da > 0:
+            spv += idx5[r[0]] * da
+            sa += da
+        if not sa:
+            continue
+        try:
+            t = ts(day, r[0])
+        except ValueError:
+            continue
+        if in_day_session(t, day):
+            vw[t - t % 60] = round(spv / sa, 2)
+    return vw
+
+def fetch_backfill(day):
+    """Minute bars from 09:00 for the gap before this loop has sampled MIS. Prices stay today-only."""
+    bars = {}
+    try:
+        start, end = ts(day, "085500"), int(datetime.datetime.now(TZ).timestamp()) + 180
+        url = ("https://ws.api.cnyes.com/ws/api/v1/charting/history?resolution=1"
+               "&symbol=TWS:TSE01:INDEX&from=%d&to=%d" % (start, end))
+        d = get(url).get("data") or {}
+        if d.get("s") == "ok":
+            vols = d.get("v") or []
+            for i, (t, c) in enumerate(zip(d.get("t") or [], d.get("c") or [])):
+                if c is None:
+                    continue
+                t = int(t) - int(t) % 60
+                if epoch_day(t) != str(day) or not in_day_session(t, day):
+                    continue
+                v = vols[i] if i < len(vols) and vols[i] else 0
+                bars[t] = (float(c), float(v or 0))
+    except Exception as e:
+        print("cnyes backfill failed:", e, file=sys.stderr)
+    if bars:
+        return bars, "cnyes"
+    try:
+        r = get("https://query1.finance.yahoo.com/v8/finance/chart/%5ETWII?interval=1m&range=1d")["chart"]["result"][0]
+        q = r["indicators"]["quote"][0]
+        vols = q.get("volume") or []
+        for i, (t, c) in enumerate(zip(r.get("timestamp") or [], q.get("close") or [])):
+            if c is None:
+                continue
+            t = int(t) - int(t) % 60
+            if epoch_day(t) != str(day) or not in_day_session(t, day):
+                continue
+            v = vols[i] if i < len(vols) and vols[i] else 0
+            bars[t] = (float(c), float(v or 0))
+    except Exception as e:
+        print("yahoo backfill failed:", e, file=sys.stderr)
+    return bars, ("yahoo" if bars else "")
+
+def load_taiex_state(day):
+    path = os.path.join(OUT, "taiex.json")
+    if not os.path.exists(path):
+        return None
+    try:
+        old = json.load(open(path, encoding="utf-8"))
+    except Exception:
+        return None
+    if str(old.get("date") or "") != str(day):
+        return None
+    return old
+
+def push_mis(hist, quote, day):
+    hist = [h for h in (hist or []) if epoch_day(h[0]) == str(day) and in_day_session(h[0], day)]
+    if not quote or quote.get("day") != str(day) or quote.get("z") is None or not quote.get("t"):
+        return hist
+    if not in_day_session(quote["t"], day):
+        return hist
+    t = int(quote["t"])
+    hist = [h for h in hist if int(h[0]) != t]
+    hist.append([t, quote["z"], quote.get("m")])
+    hist.sort(key=lambda h: h[0])
+    return hist
+
+def fold_mis(bars, hist):
+    """MIS last wins for any minute this loop has seen. Backfill volume is kept when we have it."""
+    prev_m = None
+    for h in hist:
+        t, price = int(h[0]), float(h[1])
+        m = float(h[2]) if isinstance(h[2], (int, float)) else fnum(h[2])
+        vol = None
+        if m is not None and prev_m is not None and m > prev_m:
+            vol = (m - prev_m) * MIS_M_TO_TWD
+        if m is not None:
+            prev_m = m
+        if t in bars and bars[t][1]:
+            bars[t] = (price, bars[t][1])
+        else:
+            bars[t] = (price, vol or 0.0)
+    return bars
+
+def bars_to_points(bars):
+    spv = sa = 0.0
+    pts = []
+    for t in sorted(bars):
+        price, vol = bars[t]
+        if vol and vol > 0:
+            spv += price * vol
+            sa += vol
+        pts.append([int(t), round(price, 2), None, round(spv / sa, 2) if sa else None])
+    return pts
+
+def apply_vwap_map(pts, vw):
+    last = None
+    for p in pts:
+        if p[0] in vw:
+            last = vw[p[0]]
+        if last is not None:
+            p[3] = last
+    return pts
+
+def drop_stale_taiex(day):
+    path = os.path.join(OUT, "taiex.json")
+    if not os.path.exists(path):
+        return
+    try:
+        old = json.load(open(path, encoding="utf-8"))
+    except Exception:
+        return
+    if str(old.get("date") or "") != str(day):
+        os.remove(path)
+
 def taiex():
-    try:  # TWSE official 5-sec index, downsampled to 1-min (last value per minute)
-        d = get("https://www.twse.com.tw/rwd/zh/TAIEX/MI_5MINS_INDEX?response=json")
-        if d.get("stat") != "OK": raise RuntimeError(d.get("stat"))
-        day, m = d["date"], {}
-        for row in d["data"]:
-            t = ts(day, row[0]); m[t - t % 60] = float(row[1].replace(",", ""))
-        prev = float(d["data"][0][1].replace(",", ""))  # 09:00:00 row = previous close
-        idx5 = {r[0]: float(r[1].replace(",", "")) for r in d["data"]}
+    day = session_day()
+    try:
+        data = build_taiex(day)
+    except Exception:
+        if datetime.datetime.now(TZ).hour >= 9:
+            drop_stale_taiex(day)
+        raise
+    if not data["points"] or any(epoch_day(p[0]) != str(day) for p in data["points"]):
+        raise RuntimeError("taiex points are not %s only" % day)
+    return data
+
+def build_taiex(day):
+    mis = None
+    try:
+        mis = mis_index()
+    except Exception as e:
+        print("MIS t00 failed:", e, file=sys.stderr)
+    prev = mis["y"] if mis and mis.get("day") == str(day) and mis.get("y") is not None else None
+    official = fetch_official_index(day)
+    if official:
+        pts, prev_off = official_points(official, day)
+        if prev is None:
+            prev = prev_off
         vw = {}
-        try:  # 均價線: weight each 5-sec index value by that interval's Δ成交金額 (MI_5MINS, 百萬元)
-            a = get("https://www.twse.com.tw/rwd/zh/afterTrading/MI_5MINS?response=json")
-            if a.get("stat") == "OK" and a["date"] == day:
-                pa, spv, sa = 0.0, 0.0, 0.0
-                for r in a["data"]:
-                    amt = float(r[7].replace(",", "")); da = amt - pa; pa = amt
-                    if r[0] in idx5 and da > 0:
-                        spv += idx5[r[0]] * da; sa += da
-                    if sa:
-                        t = ts(day, r[0]); vw[t - t % 60] = round(spv / sa, 2)
+        try:
+            vw = fetch_official_vwap(day, official["data"])
         except Exception as e:
             print("MI_5MINS (vwap) failed:", e, file=sys.stderr)
-        pts = [[t, v, None, vw.get(t)] for t, v in sorted(m.items())]
-        src = "twse:MI_5MINS_INDEX+MI_5MINS"
-    except Exception as e:
-        print("TWSE failed, Yahoo fallback:", e, file=sys.stderr)
-        r = get("https://query1.finance.yahoo.com/v8/finance/chart/%5ETWII?interval=1m&range=1d")["chart"]["result"][0]
-        pts = [[t, round(c, 2), None, None] for t, c in zip(r["timestamp"], r["indicators"]["quote"][0]["close"]) if c]
-        prev = r["meta"].get("chartPreviousClose"); src = "yahoo:^TWII"
-    try:  # real-time last from MIS (5s delay) appended if newer
-        q = get("https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw")["msgArray"][0]
-        if q.get("z") not in (None, "-"):
-            t = int(q["tlong"]) // 1000; v = float(q["z"]); prev = float(q["y"])
-            if not pts or t > pts[-1][0]: pts.append([t, v, None, pts[-1][3] if pts else None])
-    except Exception as e:
-        print("MIS failed:", e, file=sys.stderr)
-    return {"name": "加權指數", "src": src, "prev": prev, "points": pts}  # [epoch, index, null, vwap]
+        hist = push_mis((load_taiex_state(day) or {}).get("mis"), mis, day)
+        if mis and mis.get("day") == str(day) and mis.get("z") is not None and mis.get("t") and in_day_session(mis["t"], day):
+            t = int(mis["t"])
+            pts = [p for p in pts if p[0] != t]
+            pts.append([t, round(mis["z"], 2), None, None])
+            pts.sort(key=lambda p: p[0])
+        if vw:
+            apply_vwap_map(pts, vw)
+        elif pts:
+            bars, _how = fetch_backfill(day)
+            vol = {t: bars[t][1] for t in bars}
+            spv = sa = 0.0
+            for p in pts:
+                v = vol.get(p[0]) or 0
+                if v > 0:
+                    spv += p[1] * v
+                    sa += v
+                p[3] = round(spv / sa, 2) if sa else None
+        src = "twse:MI_5MINS_INDEX" + ("+MI_5MINS" if vw else "") + ("+mis" if hist else "")
+        return {"name": "加權指數", "src": src, "prev": prev, "date": day, "points": pts, "mis": hist}
+
+    state = load_taiex_state(day) or {}
+    bars, how = fetch_backfill(day)
+    hist = push_mis(state.get("mis"), mis, day)
+    fold_mis(bars, hist)
+    if hist:
+        last_mis = max(int(h[0]) for h in hist)
+        bars = {t: v for t, v in bars.items() if t <= last_mis}
+    if mis and mis.get("day") == str(day) and mis.get("o") and ts(day, "090000") not in bars:
+        bars[ts(day, "090000")] = (mis["o"], 0.0)
+    pts = [p for p in bars_to_points(bars) if epoch_day(p[0]) == str(day) and in_day_session(p[0], day)]
+    if not pts:
+        raise RuntimeError("no today TAIEX series")
+    if prev is None:
+        prev = state.get("prev")
+    src = "mis:tse_t00.tw" + (("+" + how) if how else "")
+    print("taiex", day, src, "n", len(pts), "mis", len(hist), file=sys.stderr)
+    return {"name": "加權指數", "src": src, "prev": prev, "date": day, "points": pts, "mis": hist}  # [epoch, index, null, vwap]
 
 # ---------- individual stocks: intraday 1-min (Yahoo chart API, server-side) ----------
 def universe():
@@ -91,6 +347,12 @@ def universe():
         for c in open(wl).read().split():
             if c in mk and (c, mk[c]) not in sel: sel.append((c, mk[c]))
     return sel
+
+def on_day(epoch, day):
+    try:
+        return epoch_day(epoch) == str(day)
+    except (TypeError, ValueError, OSError):
+        return False
 
 def stock_intraday(code, mkt):
     r = get("https://query1.finance.yahoo.com/v8/finance/chart/%s.%s?interval=1m&range=1d" % (code, mkt))["chart"]["result"][0]
@@ -143,12 +405,14 @@ def stocks(now):
     d = os.path.join(OUT, "intraday"); os.makedirs(d, exist_ok=True)
     sel = universe()
     quotes = mis_last(sel)
+    day = session_day()
     def one(cm):
         code, mkt = cm
         path = os.path.join(d, code + ".json")
         x = None
         try:
             y = stock_intraday(code, mkt)
+            y["points"] = [p for p in y["points"] if on_day(p[0], day)]
             if y["points"]:
                 x = y
         except Exception as e:
@@ -162,13 +426,17 @@ def stocks(now):
                     base = json.load(open(path, encoding="utf-8"))
                 except Exception:
                     base = None
-            pts = list((base or {}).get("points") or [])
+            pts = [p for p in ((base or {}).get("points") or []) if on_day(p[0], day)]
             if pts and q["t"] > pts[-1][0] + 6 * 3600:
                 pts = []
-            if not pts or q["t"] > pts[-1][0] + 20:
+            if q.get("t") and on_day(q["t"], day) and (not pts or q["t"] > pts[-1][0] + 20):
                 pts.append([q["t"], q["last"], 0])
             prev = q["prev"] if q["prev"] is not None else (base or {}).get("prev")
             x = {"code": code, "mkt": mkt, "prev": prev, "points": pts}
+        # MIS y is the exchange reference (開盤競價基準), including ex-dividend names.
+        # Yahoo chartPreviousClose is the pre-dividend close and must not win.
+        if q and x and q.get("prev") is not None:
+            x["prev"] = q["prev"]
         if not x or not x["points"]:
             return None
         x["updated"] = now
@@ -227,7 +495,7 @@ def etf():
         ch = "|".join("tse_%s.tw" % c for c in ETFS)
         d = get("https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=%s&json=1&delay=0" % ch)
         for q in d.get("msgArray", []):
-            y = float(q["y"])
+            y = float(q["y"])  # 開盤競價基準 / 參考價, not a guessed ex-div close
             last = mis_price(q)
             if last is None:  # no trade yet: first bid
                 b = (q.get("b") or "-").split("_")[0]
