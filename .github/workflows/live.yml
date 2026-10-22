@@ -4,9 +4,14 @@ on:
     branches: [main]
     paths: ['live/**', '.github/workflows/live.yml']
   schedule:
-    # Taipei = UTC+8. Day open 08:40 TPE = 00:40 UTC, Mon–Fri. Hourly safety 09:40–13:40 TPE.
-    - cron: "40 0 * * 1-5"
-    - cron: "40 1-5 * * 1-5"
+    # Taipei = UTC+8. GitHub may drop a single cron, so the day session has several starts.
+    # 08:35 waits until 08:45. 08:40 is the primary start. 08:50 and 09:05 run only if
+    # nothing is already in the concurrency group. Hourly safety 09:40–13:40 TPE.
+    - cron: "35 0 * * 1-5"       # 08:35 TPE
+    - cron: "40 0 * * 1-5"       # 08:40 TPE
+    - cron: "50 0 * * 1-5"       # 08:50 TPE
+    - cron: "5 1 * * 1-5"        # 09:05 TPE
+    - cron: "40 1-5 * * 1-5"     # hourly day safety
     # Night open 14:55 TPE = 06:55 UTC. Hourly safety 15:55 TPE through 04:55 next day
     # (Fri 20:55 UTC is Sat 04:55 Taipei). US cash 09:30–16:00 New York falls inside this
     # window (21:30–04:00 Taipei while the US is on daylight time).
