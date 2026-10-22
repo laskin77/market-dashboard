@@ -1,11 +1,14 @@
 {
- "target_date": "2026-10-21",
- "date": "2026-10-20",
- "published": false,
- "ratio_tse": 178.93,
- "ratio_otc": 173.31,
+ "target_date": "2026-10-22",
+ "date": "2026-10-21",
+ "ratio_tse": 182.85,
  "source": "玩股網",
- "method": "玩股網公布之大盤融資維持率（上市；上櫃另列）。目標日尚未公布，顯示最新交易日。",
+ "method": "玩股網公布之大盤融資維持率（上市；上櫃另列）。10/22 玩股網尚未公布，顯示最新交易日 10/21。",
+ "ratio_otc": 177.25,
+ "ratio_all": 181.44,
+ "margin_balance_all_yi": 8603.42,
+ "margin_balance_yi": 6443.74,
+ "margin_change_yi": 62.73,
  "history": [
   [
    "2026-09-21",
@@ -82,6 +85,10 @@
   [
    "2026-10-20",
    178.93
+  ],
+  [
+   "2026-10-21",
+   182.85
   ]
  ],
  "history_otc": [
@@ -159,17 +166,13 @@
   ],
   [
    "2026-10-20",
-   173.31
+   177.53
+  ],
+  [
+   "2026-10-21",
+   177.25
   ]
  ],
- "wantgoo_fetched_at": "2026-10-21T20:53:34+08:00",
- "wantgoo_error": "refetch from this environment returned HTTP 403 (Cloudflare). Displayed ratios are the last successful WantGoo series.",
- "estimate_crosscheck": {
-  "date": "2026-10-21",
-  "ratio_tse": 182.85,
-  "margin_balance_yi": 6443.74,
-  "margin_change_yi": 62.73,
-  "missing": 1
- },
- "generated_at": "2026-10-21T21:14:00+08:00"
+ "generated_at": "2026-10-22T22:10:55+08:00",
+ "published": false
 }
