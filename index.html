@@ -22,7 +22,7 @@ table{width:100%;border-collapse:collapse;font-size:16px}th,td{padding:7px 6px;b
 footer{margin-top:32px;border-top:1px solid #1c2a42;padding:14px 0;color:#8a97ab;font-size:14px}
 @media(max-width:700px){.sec{grid-template-columns:1fr}.cards{grid-template-columns:1fr 1fr}.stks{grid-template-columns:1fr}.cv{font-size:20px}h1{font-size:22px}.kpi b{font-size:17px}table{font-size:15px}th,td{padding:6px 3px}}
 </style><style>.jump{position:sticky;top:0;z-index:50;display:flex;gap:6px;padding:8px 6px;background:rgba(10,14,22,.96);border-bottom:1px solid #2a3344;overflow:hidden}.jump a{flex:1;text-align:center;font-size:14px;padding:7px 2px;border-radius:6px;background:#1b2433;color:#e8c46a;text-decoration:none;white-space:nowrap}#us-upd:not(:empty){margin-left:8px;font-size:12px;font-weight:400}html{scroll-behavior:smooth}h2[id]{scroll-margin-top:56px}</style><style>.jump{background:linear-gradient(180deg,#141c2b,#0a0f18)!important;box-shadow:0 4px 12px rgba(0,0,0,.6)}.jump a{background:linear-gradient(180deg,#34425a 0%,#1d2738 55%,#141b28 100%)!important;border:1px solid #0b1019;border-top-color:#56657f;box-shadow:0 3px 0 #070b12,0 5px 8px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.18);text-shadow:0 1px 1px #000;font-weight:600;transition:transform .08s,box-shadow .08s}.jump a:active{transform:translateY(3px);box-shadow:0 0 0 #070b12,0 1px 3px rgba(0,0,0,.6),inset 0 2px 4px rgba(0,0,0,.5)}</style></head><body><div class="wrap">
-<header><h1>台股盤後報告</h1><div class="date num" id="hdr" data-date="20261023">10/23（台股颱風休市，下次開市 10/27；美股、商品為美東 10/23）</div></header><nav class="jump"><a href="#s0">即時</a><a href="#s5">查股</a><a href="#s1">盤勢</a><a href="#s7">消息</a><a href="#s2">強勢</a><a href="#s3">族群</a><a href="#s4">法人</a><a href="#s6">ETF</a></nav>
+<header><h1>台股盤後報告</h1><div class="date num" id="hdr" data-date="20261023">10/23（台股颱風休市，下次開市 10/27；美股、商品為美東 10/23）</div></header><nav class="jump"><a href="#s0">即時</a><a href="#s5">查股</a><a href="#s1">盤勢</a><a href="#s2">強勢</a><a href="#s3">族群</a><a href="#s4">法人</a><a href="#s6">ETF</a><a href="#s7">消息</a></nav>
 <section class="live"><h2 id="s0">即時報價</h2>
 <style>.live .lk,.qs .lk{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;font-size:14px}.live .lk a,.qs .lk a{color:#7fb3ff;border:1px solid #1f2d47;padding:5px 9px;text-decoration:none}
 .live .jc{background:#0d1525;border:1px solid #1c2a42;padding:10px 12px;margin:0 0 10px;max-width:100%;overflow:hidden}
@@ -202,44 +202,6 @@ document.addEventListener("click",function(e){if(!e.target.closest("#qf"))G.hidd
 
 <div class="summary" id="sum" data-date="20261022">加權收 46,041.43，跌 846.34 點（−1.81%），成交值 9,334.37 億元。櫃買收 381.69，跌 13.73 點（−3.47%）。漲幅最大類股為水泥 +2.83%，跌幅最大為塑膠 −5.39%。</div>
 <h2 id="s1" data-date="20261023">一、今日盤勢（10/23；台股颱風休市，下次開市 10/27）</h2><div class="grp"><div class="gt" id="tw-gt" data-date="20261022">台股 10/22 收盤（10/23 颱風休市）</div><div class="cards"><div class="card" id="tw-taiex" data-date="20261022"><div class="cn">加權指數 10/22（10/23 休市）</div><div class="cv num dn">46,041.43</div><div class="cc num dn">−846.34　−1.81%</div><div class="note">成交值約 9,334.37 億元</div></div><div class="card" id="tw-otc" data-date="20261022"><div class="cn">櫃買指數 10/22（10/23 休市）</div><div class="cv num dn">381.69</div><div class="cc num dn">−13.73　−3.47%</div></div></div></div><style>#mg .cards{grid-template-columns:1fr}#mg .card{min-width:0}#mg .cc,#mg .note{overflow-wrap:anywhere}.mg-spark{display:block;margin:4px 0;max-width:100%}.mg-spark polyline{fill:none;stroke:#4286f5;stroke-width:1.5}</style><div class="grp" id="mg"><div class="gt">融資</div><div class="cards"><div class="card" id="mgcard"><div class="cn">融資維持率（上市）</div><div class="cv num up">182.85%</div><div class="cc num up">融資餘額 6,443.74 億　+62.73 億</div><svg class="mg-spark" width="100%" height="36" viewBox="0 0 160 36" preserveAspectRatio="none"><polyline points="0.0,15.6 8.4,13.1 16.8,12.7 25.3,12.1 33.7,15.1 42.1,12.4 50.5,10.2 58.9,7.4 67.4,2.0 75.8,4.3 84.2,4.6 92.6,7.3 101.1,8.7 109.5,17.8 117.9,15.4 126.3,29.8 134.7,27.5 143.2,30.5 151.6,34.0 160.0,28.2"/></svg><div class="note">10/21（玩股網）　上櫃 177.25%｜近20日 178.9–200.7%｜130% 為追繳線｜資料：玩股網</div></div></div></div><script>(function(){function paint(r){var el=document.getElementById("mgcard");if(!el||r.ratio_tse==null)return;if((r.source||"").indexOf("ESTIMATE")>=0)return;var ys=(r.history||[]).map(function(h){return +h[1]});if(!ys.length)ys=[+r.ratio_tse];var lo=Math.min.apply(null,ys),hi=Math.max.apply(null,ys),W=160,H=36,n=ys.length,rng=(hi-lo)||1;var pts=ys.map(function(y,i){return (i*W/(n>1?n-1:1)).toFixed(1)+","+(H-2-(y-lo)/rng*(H-4)).toFixed(1)}).join(" ");var trend=n>1&&ys[n-1]>=ys[n-2]?"up":"dn";var otc=r.ratio_otc!=null?"　上櫃 "+(+r.ratio_otc).toFixed(2)+"%":"";var md=(r.date||"").slice(5).replace("-","/");if(r.target_date&&r.date&&r.date!==r.target_date)md+="（玩股網）";var bal="";if(r.margin_balance_yi!=null&&r.margin_change_yi!=null){var ch=+r.margin_change_yi,cls=ch>0?"up":ch<0?"dn":"",sign=ch>0?"+":ch<0?"−":"";var num=function(x){return (+x).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})};bal='<div class="cc num '+cls+'">融資餘額 '+num(r.margin_balance_yi)+' 億　'+sign+num(Math.abs(ch))+' 億</div>';}el.innerHTML='<div class="cn">融資維持率（上市）</div><div class="cv num '+trend+'">'+Number(r.ratio_tse).toFixed(2)+'%</div>'+bal+'<svg class="mg-spark" width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none"><polyline points="'+pts+'"/></svg><div class="note">'+md+otc+'｜近'+n+'日 '+lo.toFixed(1)+'–'+hi.toFixed(1)+'%｜130% 為追繳線｜資料：玩股網</div>'}fetch("data/margin.json?t="+Date.now()).then(function(r){if(!r.ok)throw 0;return r.json()}).then(paint).catch(function(){})})();</script><div class="grp"><div class="gt" id="us-gt" data-date="20261023">美股（美東 10/23）<span id="us-upd" class="num"></span></div><div class="cards"><div class="card" data-us="DJI"><div class="cn">道瓊</div><div class="cv num dn">52,215.16</div><div class="cc num dn">−652.82　−1.23%</div></div><div class="card" data-us="GSPC"><div class="cn">標普500</div><div class="cv num dn">7,623.68</div><div class="cc num dn">−39.75　−0.52%</div></div><div class="card" data-us="IXIC"><div class="cn">那斯達克</div><div class="cv num dn">25,955.34</div><div class="cc num dn">−53.52　−0.21%</div></div><div class="card" data-us="SOX"><div class="cn">費城半導體</div><div class="cv num up">10,779.46</div><div class="cc num up">+47.48　+0.44%</div></div></div></div><div class="grp"><div class="gt" id="cmd-gt" data-date="20261023">商品與波動（美東 10/23）</div><div class="cards"><div class="card"><div class="cn">黃金期貨</div><div class="cv num dn">4,010.00</div><div class="cc num dn">−50.40　−1.24%</div></div><div class="card"><div class="cn">布蘭特原油</div><div class="cv num dn">111.66</div><div class="cc num dn">−1.51　−1.33%</div></div><div class="card" data-us="VIX"><div class="cn">VIX</div><div class="cv num up">19.45</div><div class="cc num up">+0.42　+2.21%</div></div></div></div><div class="grp"><div class="gt">期貨</div><div class="cards"><div class="card"><div class="cn">台指期夜盤 10/23 休市</div><div class="cv num dn">45,654</div><div class="cc num dn">−580　−1.25%</div><div class="note" id="fut-note" data-date="20261022">10/22 夜盤（10/23 05:00 收）</div></div></div></div>
-<h2 id="s7" data-date="20261024">市場消息（10/24）</h2>
-<style>
-#news{display:grid;grid-template-columns:1fr;gap:10px;min-width:0}
-#news .box{min-width:0}
-#news .box h3,#news .box li,#news .note{overflow-wrap:break-word}
-#news .code{font-size:inherit}
-@media(max-width:359px){.jump{gap:3px;padding:6px 2px}.jump a{font-size:12px;padding:6px 0}}
-</style>
-<div id="news"></div>
-<script>
-(function(){
-  function esc(s){return String(s==null?"":s).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];});}
-  function plainCodes(s){
-    return esc(s).replace(/(^|[^\d.])(\d{4})(?![\d.])/g,function(_,pre,code){
-      return pre+'<span class="code num">'+code+'</span>';
-    });
-  }
-  function md(date){
-    var s=String(date||"");
-    var m=s.match(/^(\d{4})-(\d{2})-(\d{2})$/)||s.match(/^(\d{4})(\d{2})(\d{2})$/);
-    if(!m)return "";
-    return String(+m[2])+"/"+String(+m[3]);
-  }
-  function render(d){
-    var h=document.getElementById("s7"), box=document.getElementById("news");
-    if(!box||!d)return;
-    var label=md(d.date);
-    if(h&&label){h.textContent="市場消息（"+label+"）"; h.dataset.date=String(d.date).replace(/-/g,"");}
-    var html=(d.sections||[]).map(function(sec){
-      var items=(sec.items||[]).map(function(it){return "<li>"+plainCodes(it)+"</li>";}).join("");
-      return '<div class="box"><h3>'+esc(sec.title||"")+'</h3>'+(items?'<ul>'+items+'</ul>':'')+'</div>';
-    }).join("");
-    if(d.disclaimer)html+='<div class="note">'+esc(d.disclaimer)+'</div>';
-    box.innerHTML=html;
-  }
-  fetch("data/news.json?t="+Date.now(),{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json();}).then(render).catch(function(){});
-})();
-</script>
 <h2 id="s2" data-date="20261022">二、短線強勢題材股（10/22，10/23 颱風休市）</h2><div class="stks" id="strong"><div class="stk"><div class="sh"><div><span class="sn">華經</span> <span class="code num">2468</span> <span class="mk">上市</span><span class="lim">漲停</span></div><div class="sp"><span class="num up big">55.00</span> <span class="num up">+5.00　+10.00%</span></div></div><div class="row"><span class="lbl">近5日</span><span class="num up">+18.28%</span></div><div class="row"><span class="lbl">題材</span><span>資訊服務</span></div><div class="row"><span class="lbl risk">風險</span><span>本益比 40.44，成交金額 11.57 億元</span></div></div><div class="stk"><div class="sh"><div><span class="sn">驊宏資</span> <span class="code num">6148</span> <span class="mk">上櫃</span><span class="lim">漲停</span></div><div class="sp"><span class="num up big">44.20</span> <span class="num up">+4.00　+9.95%</span></div></div><div class="row"><span class="lbl">近5日</span><span class="num up">+15.86%</span></div><div class="row"><span class="lbl">題材</span><span>上櫃</span></div><div class="row"><span class="lbl risk">風險</span><span>成交金額 7.19 億元</span></div></div><div class="stk"><div class="sh"><div><span class="sn">麗臺</span> <span class="code num">2465</span> <span class="mk">上市</span><span class="lim">漲停</span></div><div class="sp"><span class="num up big">96.20</span> <span class="num up">+8.70　+9.94%</span></div></div><div class="row"><span class="lbl">近5日</span><span class="num up">+14.93%</span></div><div class="row"><span class="lbl">題材</span><span>電腦及周邊</span></div><div class="row"><span class="lbl risk">風險</span><span>本益比 35.5，成交金額 10.01 億元</span></div></div><div class="stk"><div class="sh"><div><span class="sn">東台</span> <span class="code num">4526</span> <span class="mk">上市</span></div><div class="sp"><span class="num up big">41.05</span> <span class="num up">+3.00　+7.88%</span></div></div><div class="row"><span class="lbl">近5日</span><span class="num up">+24.77%</span></div><div class="row"><span class="lbl">題材</span><span>電機機械</span></div><div class="row"><span class="lbl risk">風險</span><span>成交金額 23.43 億元</span></div></div><div class="stk"><div class="sh"><div><span class="sn">GOGOLOOK</span> <span class="code num">6902</span> <span class="mk">上市</span></div><div class="sp"><span class="num up big">166.00</span> <span class="num up">+12.00　+7.79%</span></div></div><div class="row"><span class="lbl">近5日</span><span class="num up">+26.24%</span></div><div class="row"><span class="lbl">題材</span><span>數位雲端</span></div><div class="row"><span class="lbl risk">風險</span><span>本益比 34.51，成交金額 3.12 億元</span></div></div></div><div class="note" id="strong-note">上市與上櫃普通股（4 碼，不含 ETF），成交金額 3 億元以上，依漲跌幅由高到低取前五。漲幅 9.5% 以上標示漲停。 資料日 10/22。</div>
 <h2 id="s3" data-date="20261022">三、主流族群（10/22，10/23 颱風休市）</h2><div class="sec" id="secbox"><div class="box"><h3><span class="up">▲</span> 今日漲幅</h3><ul><li><b>水泥</b>：類股 <span class="num up">+2.83%</span>，台泥 <span class="num up">+4.29%</span>、亞泥 <span class="num up">+1.31%</span></li><li><b>資訊服務</b>：類股 <span class="num up">+1.49%</span>，華經 <span class="num up">+10.00%</span>、零壹 <span class="num up">+2.94%</span>、邁達特 <span class="num up">+2.28%</span></li><li><b>食品</b>：類股 <span class="num up">+0.83%</span>，統一 <span class="num up">+1.40%</span></li><li><b>航運</b>：類股 <span class="num up">+0.65%</span>，萬海 <span class="num up">+2.58%</span>、長榮 <span class="num up">+0.97%</span>、華航 <span class="num up">+0.74%</span></li><li><b>金融保險</b>：類股 <span class="num up">+0.62%</span>，兆豐金 <span class="num up">+2.99%</span>、第一金 <span class="num up">+2.54%</span>、永豐金 <span class="num up">+2.09%</span></li></ul></div><div class="box"><h3>近期延續</h3><ul><li>塑膠 自 9/30 以來 <span class="num up">+13.69%</span>，近 5 個交易日 <span class="num dn">−5.20%</span></li><li>玻璃陶瓷 自 9/30 以來 <span class="num up">+10.29%</span>，近 5 個交易日 <span class="num up">+6.69%</span></li><li>油電燃氣 自 9/30 以來 <span class="num up">+8.36%</span>，近 5 個交易日 <span class="num dn">−4.21%</span></li></ul><h3 style="margin-top:14px"><span class="dn">▼</span> 10月以來較弱</h3><ul><li>綠能環保 自 9/30 以來 <span class="num dn">−8.00%</span>，近 5 個交易日 <span class="num dn">−3.08%</span></li><li>電子零組件 自 9/30 以來 <span class="num dn">−7.65%</span>，近 5 個交易日 <span class="num dn">−3.55%</span></li><li>其他電子 自 9/30 以來 <span class="num dn">−6.35%</span>，近 5 個交易日 <span class="num dn">−0.20%</span></li><li>半導體 自 9/30 以來 <span class="num dn">−6.24%</span>，近 5 個交易日 <span class="num dn">−2.44%</span></li></ul><h3 style="margin-top:14px">籌碼</h3><ul><li>外資及陸資（不含外資自營商）<span class="num dn">−815.82 億</span>；投信 <span class="num up">+94.92 億</span>；三大法人合計 <span class="num dn">−994.67 億</span>（10/22，BFI82U）</li></ul></div></div>
 <h2 id="s4" data-date="20261022">四、法人買超金額前五（10/22 上市，證交所，10/23 颱風休市）</h2>
@@ -422,6 +384,44 @@ window.applyEtf=function(d){try{
   }
 }catch(err){}};
 (async function(){try{var d=await(await fetch("data/etf.json?t="+Date.now())).json();if(!window.__etfFromLive)applyEtf(d)}catch(e){}})();
+</script>
+<h2 id="s7" data-date="20261024">市場消息（10/24）</h2>
+<style>
+#news{display:grid;grid-template-columns:1fr;gap:10px;min-width:0}
+#news .box{min-width:0}
+#news .box h3,#news .box li,#news .note{overflow-wrap:break-word}
+#news .code{font-size:inherit}
+@media(max-width:359px){.jump{gap:3px;padding:6px 2px}.jump a{font-size:12px;padding:6px 0}}
+</style>
+<div id="news"></div>
+<script>
+(function(){
+  function esc(s){return String(s==null?"":s).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];});}
+  function plainCodes(s){
+    return esc(s).replace(/(^|[^\d.])(\d{4})(?![\d.])/g,function(_,pre,code){
+      return pre+'<span class="code num">'+code+'</span>';
+    });
+  }
+  function md(date){
+    var s=String(date||"");
+    var m=s.match(/^(\d{4})-(\d{2})-(\d{2})$/)||s.match(/^(\d{4})(\d{2})(\d{2})$/);
+    if(!m)return "";
+    return String(+m[2])+"/"+String(+m[3]);
+  }
+  function render(d){
+    var h=document.getElementById("s7"), box=document.getElementById("news");
+    if(!box||!d)return;
+    var label=md(d.date);
+    if(h&&label){h.textContent="市場消息（"+label+"）"; h.dataset.date=String(d.date).replace(/-/g,"");}
+    var html=(d.sections||[]).map(function(sec){
+      var items=(sec.items||[]).map(function(it){return "<li>"+plainCodes(it)+"</li>";}).join("");
+      return '<div class="box"><h3>'+esc(sec.title||"")+'</h3>'+(items?'<ul>'+items+'</ul>':'')+'</div>';
+    }).join("");
+    if(d.disclaimer)html+='<div class="note">'+esc(d.disclaimer)+'</div>';
+    box.innerHTML=html;
+  }
+  fetch("data/news.json?t="+Date.now(),{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json();}).then(render).catch(function(){});
+})();
 </script>
 <footer id="ft" data-date="20261022">資料整理自公開資訊，不構成投資建議。<br>各段資料日見標題。更新時間：2026-10-24 07:53 台北時間</footer>
 </div></body></html>
