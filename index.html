@@ -390,7 +390,7 @@ window.applyEtf=function(d){try{
 #news{display:grid;grid-template-columns:1fr;gap:10px;min-width:0}
 #news .box{min-width:0}
 #news .box h3,#news .box li,#news .note{overflow-wrap:break-word}
-#news .box h3{text-decoration:underline;text-underline-offset:3px}
+#news .src{text-decoration:underline;text-underline-offset:3px}
 #news .code{font-size:inherit}
 @media(max-width:359px){.jump{gap:3px;padding:6px 2px}.jump a{font-size:12px;padding:6px 0}}
 </style>
@@ -409,13 +409,22 @@ window.applyEtf=function(d){try{
     if(!m)return "";
     return String(+m[2])+"/"+String(+m[3]);
   }
+  function itemHtml(it, mark){
+    var text=String(it==null?"":it);
+    if(mark){
+      var i=text.indexOf("：");
+      if(i>0)return '<span class="src">'+plainCodes(text.slice(0,i))+'</span>'+plainCodes(text.slice(i));
+    }
+    return plainCodes(text);
+  }
   function render(d){
     var h=document.getElementById("s7"), box=document.getElementById("news");
     if(!box||!d)return;
     var label=md(d.date);
     if(h&&label){h.textContent="市場消息（"+label+"）"; h.dataset.date=String(d.date).replace(/-/g,"");}
     var html=(d.sections||[]).map(function(sec){
-      var items=(sec.items||[]).map(function(it){return "<li>"+plainCodes(it)+"</li>";}).join("");
+      var mark=sec.title==="市場消息";
+      var items=(sec.items||[]).map(function(it){return "<li>"+itemHtml(it, mark)+"</li>";}).join("");
       return '<div class="box"><h3>'+esc(sec.title||"")+'</h3>'+(items?'<ul>'+items+'</ul>':'')+'</div>';
     }).join("");
     if(d.disclaimer)html+='<div class="note">'+esc(d.disclaimer)+'</div>';
