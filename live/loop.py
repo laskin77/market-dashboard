@@ -111,6 +111,9 @@ def enter_session():
             print("in session", now().isoformat(timespec="seconds"), flush=True)
             return True
         if action == "wait":
+            # A start just before 15:00 should publish the cash close while it
+            # waits, instead of holding the report until the night session opens.
+            maybe_close(os.environ.get("OUT_DIR") or "/tmp/mkt-data")
             print("waiting", int(secs), "s for session open", flush=True)
             sleep_for(secs, "waiting")
             continue
@@ -159,9 +162,11 @@ def publish(out_dir):
 def maybe_close(out_dir):
     """After the cash close, rebuild the static report once official files are up.
 
-    GitHub cron often skips a slot. The night loop is already running by 15:00,
-    so it retries every 10 minutes from 14:30 to 20:00. close.py itself no-ops
-    once today's file is complete, and again until T86/BFI82U arrive after 16:30.
+    GitHub often delivers the close cron hours late, and on 10/27 it had not
+    started by 18:35. This loop is already up for the night session, so it
+    rebuilds every 10 minutes from 14:30 to 20:00 and commits the JSON to main.
+    close.py no-ops once today's file is complete, and keeps going until
+    T86/BFI82U arrive after 16:30.
     """
     t = now()
     if t.weekday() > 4:
@@ -179,6 +184,7 @@ def maybe_close(out_dir):
         f.write(str(time.time()))
     env = os.environ.copy()
     env["OUT_DIR"] = out_dir
+    env["CLOSE_PUSH"] = "1"
     print("close rebuild", t.isoformat(timespec="seconds"), flush=True)
     subprocess.call([sys.executable, os.path.join(ROOT, "live", "close.py")], env=env)
 

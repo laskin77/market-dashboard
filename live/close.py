@@ -9,7 +9,7 @@ still publishes the rest and leaves inst.ready false.
 CLOSE_PUSH=1 commits those JSON files to main (used by the live loop).
 The close workflow commits them itself.
 """
-import datetime, json, os, subprocess, sys, time, urllib.request
+import datetime, json, os, shutil, subprocess, sys, time, urllib.request
 
 TZ = datetime.timezone(datetime.timedelta(hours=8))
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -176,15 +176,59 @@ def parse_value_yi(d):
     return None
 
 
-def fmtqik_turnover(day):
-    d = get("https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK?response=json")
-    if d.get("stat") != "OK":
+def parse_fmtqik(payload):
+    out = {}
+    if not payload or payload.get("stat") != "OK":
+        return out
+    for row in payload.get("data") or []:
+        parts = str(row[0]).split("/")
+        if len(parts) != 3:
+            continue
+        try:
+            key = "%04d%02d%02d" % (int(parts[0]) + 1911, int(parts[1]), int(parts[2]))
+        except ValueError:
+            continue
+        out[key] = row
+    return out
+
+
+def load_sessions(day):
+    """Trading dates from FMTQIK for this month and the month before.
+
+    Weekday arithmetic counts 10/23 (typhoon) and 10/26 (make-up holiday) as
+    sessions. The exchange list is what '近 5 個交易日' and a late cron need.
+    """
+    rows = {}
+    anchor = datetime.datetime.strptime(day, "%Y%m%d")
+    months = [anchor, anchor.replace(day=1) - datetime.timedelta(days=1)]
+    for m in months:
+        stamp = m.strftime("%Y%m%d")
+        try:
+            payload = get("https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK?response=json&date=%s" % stamp)
+        except Exception as e:
+            print("FMTQIK", stamp, e, file=sys.stderr)
+            continue
+        rows.update(parse_fmtqik(payload))
+    return {"days": sorted(rows), "rows": rows}
+
+
+def fmtqik_turnover(day, sessions=None):
+    row = ((sessions or {}).get("rows") or {}).get(day)
+    if row is None:
+        try:
+            payload = get("https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK?response=json&date=%s" % day)
+        except Exception:
+            payload = None
+        row = parse_fmtqik(payload).get(day) if payload else None
+    if not row:
         return None
-    want = "%s/%s/%s" % (str(int(day[:4]) - 1911), day[4:6], day[6:8])
-    for row in d.get("data") or []:
-        if row[0] == want:
-            return round(fnum(row[2]) / 1e8, 2)
-    return None
+    v = fnum(row[2])
+    return round(v / 1e8, 2) if v else None
+
+
+def industry_in(industry, sector):
+    """TWSE writes 週 in some index names and 周 in the industry table."""
+    return industry.replace("週", "周") in sector.replace("週", "周")
 
 
 def parse_quotes(d):
@@ -396,10 +440,11 @@ def estimate_next(freq, ex):
     return {"status": "est", "month": "%04d-%02d" % (year, month), "label": label_s}
 
 
-def build(day):
+def build(day, sessions=None):
+    sessions = sessions or {"days": [], "rows": {}}
     d = mi_index(day)
     taiex = parse_taiex(d)
-    value = fmtqik_turnover(day)
+    value = fmtqik_turnover(day, sessions)
     sectors = parse_sectors(d)
     quotes = parse_quotes(d)
     quotes.extend(tpex_quotes())
@@ -421,8 +466,8 @@ def build(day):
             "pe": q["pe"], "value_yi": round(q["value"] / 1e8, 2),
         })
     # Month-to-date and five-session sector moves from index levels, not from a story.
-    base_day = prev_month_end(day)
-    week_day = sessions_ago(day, 5)
+    base_day = prev_month_end(day, sessions)
+    week_day = sessions_ago(day, 5, sessions)
     base_lv, week_lv = {}, {}
     try:
         time.sleep(0.4)
@@ -442,7 +487,7 @@ def build(day):
         wk = week_lv.get(s["index"])
         row["mtd"] = round((s["last"] / old - 1) * 100, 2) if old else None
         row["week"] = round((s["last"] / wk - 1) * 100, 2) if wk else None
-        leaders = [q for q in quotes if ind.get(q["code"]) and ind[q["code"]] in s["name"] and q["value"] >= 1e8]
+        leaders = [q for q in quotes if ind.get(q["code"]) and industry_in(ind[q["code"]], s["name"]) and q["value"] >= 1e8]
         leaders.sort(key=lambda q: -q["pct"])
         row["leaders"] = [{"name": q["name"], "code": q["code"], "pct": q["pct"]} for q in leaders[:3]]
         sector_rows.append(row)
@@ -516,15 +561,28 @@ def build(day):
     return report
 
 
-def prev_month_end(day):
+def prev_month_end(day, sessions=None):
+    days = (sessions or {}).get("days") or []
+    month = day[:6]
+    prior = [d for d in days if d[:6] < month]
+    if prior:
+        return prior[-1]
     d = datetime.datetime.strptime(day, "%Y%m%d").replace(day=1) - datetime.timedelta(days=1)
     while d.weekday() >= 5:
         d -= datetime.timedelta(days=1)
     return d.strftime("%Y%m%d")
 
 
-def sessions_ago(day, n):
-    """Nth prior weekday. Holidays can make this a non-session; the fetch then fails soft."""
+def sessions_ago(day, n, sessions=None):
+    """Close of the session n trading days before `day`.
+
+    FMTQIK dates skip closures. Weekdays are only a fallback when that
+    calendar did not load, and can count a holiday as a session.
+    """
+    days = (sessions or {}).get("days") or []
+    prior = [d for d in days if d < day]
+    if len(prior) >= n:
+        return prior[-n]
     d = datetime.datetime.strptime(day, "%Y%m%d")
     left = n
     while left:
@@ -532,6 +590,33 @@ def sessions_ago(day, n):
         if d.weekday() < 5:
             left -= 1
     return d.strftime("%Y%m%d")
+
+
+def candidate_days(day, sessions):
+    """Newest first: the calendar day, the last real session, then weekdays.
+
+    GitHub has been delivering the close cron 5–7 hours late. A slot scheduled
+    for the afternoon can start after midnight, when `ymd()` is already the
+    next date and MI_INDEX has nothing for it.
+    """
+    out = []
+
+    def add(s):
+        if s and s not in out:
+            out.append(s)
+
+    add(day)
+    days = (sessions or {}).get("days") or []
+    prior = [d for d in days if d < day]
+    if prior:
+        add(prior[-1])
+    d = datetime.datetime.strptime(day, "%Y%m%d")
+    for _ in range(6):
+        d -= datetime.timedelta(days=1)
+        while d.weekday() >= 5:
+            d -= datetime.timedelta(days=1)
+        add(d.strftime("%Y%m%d"))
+    return out
 
 
 def etf_from_table(d, found):
@@ -586,65 +671,96 @@ def write_outputs(report, day):
           "strong", [s["code"] for s in report["strong"]["items"]])
 
 
-def push_main():
+def push_main(day):
+    """Commit the close files from a fresh clone.
+
+    The live checkout is shallow and stays out for hours, so rebasing inside
+    it is not a reliable way onto main.
+    """
     files = ["data/close.json", "data/etf.json", "data/etf_div.json"]
-    subprocess.call(["git", "config", "user.email", "41898208+github-actions[bot]@users.noreply.github.com"], cwd=ROOT)
-    subprocess.call(["git", "config", "user.name", "github-actions[bot]"], cwd=ROOT)
-    subprocess.check_call(["git", "add", *files], cwd=ROOT)
-    if subprocess.call(["git", "diff", "--cached", "--quiet"], cwd=ROOT) == 0:
-        print("close unchanged")
-        return
-    day = ymd()
-    subprocess.check_call(["git", "commit", "-q", "-m", "data: close %s" % day], cwd=ROOT)
     token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
     repo = os.environ.get("GITHUB_REPOSITORY", "laskin77/market-dashboard")
     if not token:
         print("no token, skip close push", file=sys.stderr)
         return
     url = "https://x-access-token:%s@github.com/%s.git" % (token, repo)
+    work = "/tmp/mkt-close-push"
+    shutil.rmtree(work, ignore_errors=True)
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    subprocess.check_call(["git", "clone", "--depth", "20", "--branch", "main", url, work], env=env)
+    for rel in files:
+        shutil.copy(os.path.join(ROOT, rel), os.path.join(work, rel))
+    subprocess.check_call(["git", "config", "user.email", "41898208+github-actions[bot]@users.noreply.github.com"], cwd=work)
+    subprocess.check_call(["git", "config", "user.name", "github-actions[bot]"], cwd=work)
+    subprocess.check_call(["git", "add", *files], cwd=work)
+    if subprocess.call(["git", "diff", "--cached", "--quiet"], cwd=work) == 0:
+        print("close unchanged")
+        return
+    stamp = "%s-%s-%s" % (day[:4], day[4:6], day[6:8])
+    subprocess.check_call(["git", "commit", "-q", "-m", "data: close %s" % stamp], cwd=work)
     try:
-        subprocess.check_call(["git", "pull", "--rebase", "--autostash", url, "main"], cwd=ROOT)
-    except subprocess.CalledProcessError as e:
-        print("close rebase failed", e, file=sys.stderr)
-    subprocess.check_call(["git", "push", url, "HEAD:main"], cwd=ROOT)
-    print("close pushed", day)
+        subprocess.check_call(["git", "push", url, "HEAD:main"], cwd=work, env=env)
+    except subprocess.CalledProcessError:
+        subprocess.check_call(["git", "fetch", "--depth", "20", url, "main"], cwd=work, env=env)
+        subprocess.check_call(["git", "rebase", "FETCH_HEAD"], cwd=work, env=env)
+        subprocess.check_call(["git", "push", url, "HEAD:main"], cwd=work, env=env)
+    print("close pushed", stamp)
 
 
 def already_done(day):
     cur = load_json(os.path.join(ROOT, "data", "close.json"))
-    if not cur or cur.get("date") != day:
+    if not cur or cur.get("date") != day or not cur.get("market"):
         return False
-    inst = cur.get("inst") or {}
-    # After 17:00 keep retrying until institutional numbers are in.
+    if (cur.get("inst") or {}).get("ready"):
+        return True
+    # T86 / BFI82U lag the cash close. A partial file is fine before 16:30
+    # on that same date. After that, and on any later calendar date (a cron
+    # that finally starts after midnight), keep rebuilding until the totals land.
     hm = taipei_today().hour * 60 + taipei_today().minute
-    if hm >= 16 * 60 + 30 and not inst.get("ready"):
-        return False
-    return bool(cur.get("market"))
+    if day == ymd() and hm < 16 * 60 + 30:
+        return True
+    return False
+
+
+def copy_out(cur):
+    out = os.environ.get("OUT_DIR")
+    if out and cur:
+        save_json(os.path.join(out, "close.json"), cur)
 
 
 def main():
     day = os.environ.get("CLOSE_DATE") or ymd()
-    if already_done(day) and os.environ.get("CLOSE_FORCE") != "1":
-        print("close already complete", day)
-        cur = load_json(os.path.join(ROOT, "data", "close.json"))
-        out = os.environ.get("OUT_DIR")
-        if out and cur:
-            save_json(os.path.join(out, "close.json"), cur)
-        return 0
+    pinned = bool(os.environ.get("CLOSE_DATE"))
+    sessions = {"days": [], "rows": {}}
     try:
-        report = build(day)
-    except RuntimeError as e:
-        print("close not ready:", e, file=sys.stderr)
-        return 0
+        sessions = load_sessions(day)
     except Exception as e:
-        print("close build failed:", e, file=sys.stderr)
-        return 2
-    write_outputs(report, day)
-    if os.environ.get("CLOSE_PUSH") == "1":
+        print("session calendar failed", e, file=sys.stderr)
+    days = [day] if pinned else candidate_days(day, sessions)
+    for c in days:
+        if already_done(c) and os.environ.get("CLOSE_FORCE") != "1":
+            if c == day:
+                print("close already complete", day)
+                copy_out(load_json(os.path.join(ROOT, "data", "close.json")))
+                return 0
+            print("close not ready:", day, file=sys.stderr)
+            return 0
         try:
-            push_main()
+            report = build(c, sessions)
+        except RuntimeError as e:
+            print("close not ready:", c, e, file=sys.stderr)
+            continue
         except Exception as e:
-            print("close push failed:", e, file=sys.stderr)
+            print("close build failed:", e, file=sys.stderr)
+            return 2
+        write_outputs(report, c)
+        if os.environ.get("CLOSE_PUSH") == "1":
+            try:
+                push_main(c)
+            except Exception as e:
+                print("close push failed:", e, file=sys.stderr)
+        return 0
     return 0
 
 

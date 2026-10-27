@@ -1,7 +1,10 @@
 name: close
 on:
   schedule:
-    # Taipei = UTC+8. GitHub drops single crons, so each publish window has retries.
+    # Taipei = UTC+8. GitHub drops single crons and, on 10/23 and 10/26, delivered
+    # every slot 5–7 hours late. The night loop commits the same files on time
+    # (CLOSE_PUSH). These slots stay as the backup. close.py also publishes the
+    # latest FMTQIK session when a delayed run wakes up after midnight.
     # 14:40 builds 盤勢 / 強勢 / 族群 / ETF as soon as MI_INDEX and TPEx are up.
     # 16:45 and 17:30 rebuild once T86 and BFI82U are published. Later slots retry.
     - cron: "40 6 * * 1-5"    # 14:40
