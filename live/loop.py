@@ -4,7 +4,7 @@
 Pages builds from main, so these commits stay on `data` and do not rebuild the site.
 The page reads live.json by commit SHA (raw.githubusercontent.com), which is uncached.
 """
-import datetime, os, shutil, subprocess, sys, time
+import datetime, json, os, shutil, subprocess, sys, time, urllib.error, urllib.request
 
 TZ = datetime.timezone(datetime.timedelta(hours=8))
 INTERVAL = 45
@@ -13,6 +13,14 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def now():
     return datetime.datetime.now(TZ)
+
+# Cash session 08:45–13:50 is 305 minutes. The runner cap is 360, so this job can
+# wait for the open and still cover the whole session only when the wait is short.
+DAY_INLINE_WAIT = 45 * 60
+# A delayed night cron lands in the 05:05–08:45 gap. Bridge that whole gap; anything
+# earlier than ~04:45 is not this handoff (Monday's 05:20 cron covers the pre-dawn).
+DAY_BRIDGE = 4 * 3600
+SHORT_WAIT = 15 * 60  # night open only — unchanged
 
 def in_session(t):
     wd, hm = t.weekday(), t.hour * 60 + t.minute  # Mon=0
@@ -24,24 +32,97 @@ def in_session(t):
         return True  # tail Tue–Sat 00:00–05:05 (includes Sat early morning)
     return False
 
-def wait_until_open():
-    t = now()
+def session_action(t):
+    """What a run should do at time t.
+
+    "run"    — already inside a session
+    "wait"   — sleep `seconds`, then trade in this job
+    "bridge" — sleep `seconds` (until DAY_INLINE_WAIT before 08:45), dispatch a
+               fresh run, and exit. The fresh run has a full runner budget for
+               the cash session. Used when a start in the post-night gap is too
+               early to wait and trade in one job.
+    "exit"   — no session soon enough to stay up
+    """
     if in_session(t):
-        print("in session", t.isoformat(timespec="seconds"), flush=True)
-        return True
-    waits = []
-    if t.weekday() <= 4:
-        for hm in (8 * 60 + 45, 15 * 60):
-            start = t.replace(hour=hm // 60, minute=hm % 60, second=0, microsecond=0)
-            delta = (start - t).total_seconds()
-            if 0 < delta <= 15 * 60:
-                waits.append(delta)
-    if not waits:
-        print("outside session, exit", t.isoformat(timespec="seconds"), flush=True)
+        return ("run", 0.0)
+    if t.weekday() > 4:
+        return ("exit", 0.0)
+    day = t.replace(hour=8, minute=45, second=0, microsecond=0)
+    day_delta = (day - t).total_seconds()
+    if 0 < day_delta <= DAY_BRIDGE:
+        if day_delta <= DAY_INLINE_WAIT:
+            return ("wait", day_delta)
+        return ("bridge", day_delta - DAY_INLINE_WAIT)
+    night = t.replace(hour=15, minute=0, second=0, microsecond=0)
+    night_delta = (night - t).total_seconds()
+    if 0 < night_delta <= SHORT_WAIT:
+        return ("wait", night_delta)
+    return ("exit", 0.0)
+
+def sleep_for(seconds, label):
+    end = time.monotonic() + max(0, seconds)
+    next_log = 0.0
+    while True:
+        remain = end - time.monotonic()
+        if remain <= 0:
+            return
+        if time.monotonic() >= next_log:
+            print("%s %ds" % (label, int(remain)), flush=True)
+            next_log = time.monotonic() + 300
+        time.sleep(min(remain, 30))
+
+def dispatch_live():
+    """Start a fresh live-intraday run. GITHUB_TOKEN may dispatch workflows."""
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY", "laskin77/market-dashboard")
+    if not token:
+        print("no token, cannot dispatch", file=sys.stderr, flush=True)
         return False
-    print("waiting", int(min(waits)), "s for session open", flush=True)
-    time.sleep(min(waits))
-    return True
+    url = "https://api.github.com/repos/%s/actions/workflows/live.yml/dispatches" % repo
+    req = urllib.request.Request(
+        url,
+        data=json.dumps({"ref": "main"}).encode(),
+        method="POST",
+        headers={
+            "Authorization": "Bearer " + token,
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json",
+            "User-Agent": "market-dashboard-live",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            print("dispatched live-intraday", resp.status, flush=True)
+            return 200 <= resp.status < 300
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:300]
+        print("dispatch failed", e.code, detail, file=sys.stderr, flush=True)
+        return False
+    except Exception as e:
+        print("dispatch failed", e, file=sys.stderr, flush=True)
+        return False
+
+def enter_session():
+    """Block until this job should trade. False means the run should stop."""
+    while True:
+        action, secs = session_action(now())
+        if action == "run":
+            print("in session", now().isoformat(timespec="seconds"), flush=True)
+            return True
+        if action == "wait":
+            print("waiting", int(secs), "s for session open", flush=True)
+            sleep_for(secs, "waiting")
+            continue
+        if action == "bridge":
+            print("early for day open; sleeping", int(secs), "s then handing off", flush=True)
+            sleep_for(secs, "bridging")
+            if dispatch_live():
+                return False
+            print("handoff failed; covering the open in this job", flush=True)
+            continue
+        print("outside session, exit", now().isoformat(timespec="seconds"), flush=True)
+        return False
 
 def publish(out_dir):
     token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
@@ -112,9 +193,7 @@ def cycle(out_dir):
     subprocess.call([sys.executable, os.path.join(ROOT, "live", "fetch.py")], env=env)
     publish(out_dir)
 
-def main():
-    if not wait_until_open():
-        return 0
+def run_loop():
     out_dir = os.environ.get("OUT_DIR") or "/tmp/mkt-data"
     os.makedirs(out_dir, exist_ok=True)
     deadline = time.monotonic() + MAX_MIN * 60
@@ -134,6 +213,19 @@ def main():
         if remain > 0 and time.monotonic() + remain < deadline:
             time.sleep(remain)
     print("loop exit", flush=True)
+
+def main():
+    if not enter_session():
+        return 0
+    run_loop()
+    # The night loop exits at 05:05, hours before the cash open, and the morning
+    # crons are often late or dropped. Hand the day session to a fresh runner
+    # instead of exiting. Night-to-US handoff is unchanged: this only fires when
+    # today's 08:45 open is still ahead.
+    if session_action(now())[0] in ("wait", "bridge"):
+        print("day open still ahead; dispatching a fresh run", flush=True)
+        if not dispatch_live() and enter_session():
+            run_loop()
     return 0
 
 if __name__ == "__main__":

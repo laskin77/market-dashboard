@@ -5,8 +5,12 @@ on:
     paths: ['live/**', '.github/workflows/live.yml']
   schedule:
     # Taipei = UTC+8. GitHub may drop a single cron, so the day session has several starts.
-    # 08:35 waits until 08:45. 08:40 is the primary start. 08:50 and 09:05 run only if
-    # nothing is already in the concurrency group. Hourly safety 09:40–13:40 TPE.
+    # 05:20 (previous evening UTC) lands in the post-night gap and waits for 08:45
+    # instead of exiting; the night loop also dispatches this workflow when it
+    # ends at 05:05. 08:35 waits until 08:45. 08:40 is the primary start. Later
+    # starts run only if nothing is already in the concurrency group.
+    # Hourly safety 09:40–13:40 TPE.
+    - cron: "20 21 * * 0-4"      # 05:20 TPE Mon–Fri
     - cron: "35 0 * * 1-5"       # 08:35 TPE
     - cron: "40 0 * * 1-5"       # 08:40 TPE
     - cron: "50 0 * * 1-5"       # 08:50 TPE
@@ -23,13 +27,14 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+  actions: write
 concurrency:
   group: live
   cancel-in-progress: false
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
         with:
