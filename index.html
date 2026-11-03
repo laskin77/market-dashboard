@@ -273,7 +273,13 @@ function renderInst(d){
   function rows(list){return (list||[]).map(function(r,i){return '<tr><td class="num">'+(i+1)+"</td><td>"+esc(r.name)+' <span class="code num">'+esc(r.code)+'</span></td><td class="r num up">'+pm(r.amt_yi,2)+'</td><td class="r num">'+price(r.close)+'</td><td class="r num '+cls(r.pct)+'">'+pm(r.pct,2)+"%</td></tr>";}).join("");}
   return '<div class="box"><h3>外資買超</h3>'+head+rows(inst.foreign)+'</tbody></table></div><div class="box"><h3>投信買超</h3>'+head+rows(inst.trust)+"</tbody></table></div>";
 }
-function renderInstNote(d){return "買超金額為估算（以收盤價計）＝證交所 T86 買賣超股數 × "+d.label+" 收盤價（MI_INDEX）；外資為外陸資（不含外資自營商）；僅上市。";}
+function renderInstNote(d){
+  var inst=d.inst||{}, extra="";
+  if(inst.ready&&inst.dealer_own_yi!=null&&inst.dealer_hedge_yi!=null){
+    extra="自營商(自行) "+pm(inst.dealer_own_yi,2)+" 億、自營商(避險) "+pm(inst.dealer_hedge_yi,2,Math.abs(inst.dealer_hedge_yi)>=1000)+" 億。";
+  }
+  return extra+"買超金額為估算（以收盤價計）＝證交所 T86 買賣超股數 × "+d.label+" 收盤價（MI_INDEX）；外資為外陸資（不含外資自營商）；僅上市。";
+}
 function tagHtml(nxt){return nxt&&nxt.status==="ann"?"<span class=etag>已公告</span>":"<span class='etag est'>預估</span>";}
 function amtTxt(n){return String(n);}
 function nextNote(item){

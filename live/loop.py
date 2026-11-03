@@ -164,15 +164,15 @@ def maybe_close(out_dir):
 
     GitHub often delivers the close cron hours late, and on 10/27 it had not
     started by 18:35. This loop is already up for the night session, so it
-    rebuilds every 10 minutes from 14:30 to 20:00 and commits the JSON to main.
-    close.py no-ops once today's file is complete, and keeps going until
-    T86/BFI82U arrive after 16:30.
+    rebuilds every 10 minutes from 14:30 to 21:00 and commits the JSON to main.
+    close.py no-ops only after T86/BFI82U are in the file. A 14:40 file that
+    still has inst.ready false is retried on the next pass, not held until 16:30.
     """
     t = now()
     if t.weekday() > 4:
         return
     hm = t.hour * 60 + t.minute
-    if hm < 14 * 60 + 30 or hm > 20 * 60:
+    if hm < 14 * 60 + 30 or hm > 21 * 60:
         return
     stamp_path = "/tmp/mkt-close-stamp"
     try:

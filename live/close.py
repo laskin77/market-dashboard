@@ -354,6 +354,8 @@ def bfi(day):
     return {
         "foreign": out.get("外資及陸資(不含外資自營商)"),
         "trust": out.get("投信"),
+        "dealer_own": out.get("自營商(自行買賣)"),
+        "dealer_hedge": out.get("自營商(避險)"),
         "total": out.get("合計"),
     }
 
@@ -396,6 +398,33 @@ def t86_top(day, quotes):
 
 def yi(v):
     return None if v is None else round(v / 1e8, 2)
+
+
+def inst_block(day, quotes):
+    totals = bfi(day)
+    foreign, trust = t86_top(day, quotes)
+    if totals.get("foreign") is None or totals.get("trust") is None or totals.get("total") is None:
+        raise RuntimeError("BFI82U missing a total")
+    if totals.get("dealer_own") is None or totals.get("dealer_hedge") is None:
+        raise RuntimeError("BFI82U missing dealer rows")
+    if not foreign or not trust:
+        raise RuntimeError("T86 top lists empty")
+    return {
+        "ready": True, "date": day,
+        "foreign_yi": yi(totals["foreign"]), "trust_yi": yi(totals["trust"]),
+        "dealer_own_yi": yi(totals["dealer_own"]), "dealer_hedge_yi": yi(totals["dealer_hedge"]),
+        "total_yi": yi(totals["total"]),
+        "foreign": foreign, "trust": trust,
+    }
+
+
+def inst_complete(inst):
+    if not inst or not inst.get("ready") or not inst.get("date"):
+        return False
+    for key in ("foreign_yi", "trust_yi", "dealer_own_yi", "dealer_hedge_yi", "total_yi"):
+        if inst.get(key) is None:
+            return False
+    return bool(inst.get("foreign")) and bool(inst.get("trust"))
 
 
 def roll_div(div, today):
@@ -498,14 +527,7 @@ def build(day, sessions=None):
     inst = {"ready": False, "date": None}
     try:
         time.sleep(0.4)
-        totals = bfi(day)
-        foreign, trust = t86_top(day, quotes)
-        inst = {
-            "ready": True, "date": day,
-            "foreign_yi": yi(totals["foreign"]), "trust_yi": yi(totals["trust"]),
-            "total_yi": yi(totals["total"]),
-            "foreign": foreign, "trust": trust,
-        }
+        inst = inst_block(day, quotes)
     except Exception as e:
         print("inst not ready:", e, file=sys.stderr)
     prev = load_json(os.path.join(ROOT, "data", "close.json")) or {}
@@ -712,15 +734,20 @@ def already_done(day):
     cur = load_json(os.path.join(ROOT, "data", "close.json"))
     if not cur or cur.get("date") != day or not cur.get("market"):
         return False
-    if (cur.get("inst") or {}).get("ready"):
-        return True
-    # T86 / BFI82U lag the cash close. A partial file is fine before 16:30
-    # on that same date. After that, and on any later calendar date (a cron
-    # that finally starts after midnight), keep rebuilding until the totals land.
-    hm = taipei_today().hour * 60 + taipei_today().minute
-    if day == ymd() and hm < 16 * 60 + 30:
-        return True
-    return False
+    # A file with 盤勢 but no 法人 is not done. T86/BFI82U often appear after
+    # the 14:40 pass; the loop and the later crons must keep trying the same day.
+    return inst_complete(cur.get("inst"))
+
+
+def fill_inst(report, day):
+    """Add T86/BFI82U onto today's close without rebuilding the other sections."""
+    d = mi_index(day)
+    quotes = parse_quotes(d)
+    quotes.extend(tpex_quotes())
+    report = json.loads(json.dumps(report))
+    report["inst"] = inst_block(day, quotes)
+    report["updated"] = taipei_today().isoformat(timespec="seconds")
+    return report
 
 
 def copy_out(cur):
@@ -745,6 +772,25 @@ def main():
                 copy_out(load_json(os.path.join(ROOT, "data", "close.json")))
                 return 0
             print("close not ready:", day, file=sys.stderr)
+            return 0
+        cur = load_json(os.path.join(ROOT, "data", "close.json"))
+        if cur and cur.get("date") == c and cur.get("market") and os.environ.get("CLOSE_FORCE") != "1":
+            try:
+                report = fill_inst(cur, c)
+            except RuntimeError as e:
+                print("inst not ready:", c, e, file=sys.stderr)
+                if c == day:
+                    return 0
+                continue
+            except Exception as e:
+                print("inst fill failed:", e, file=sys.stderr)
+                return 2
+            write_outputs(report, c)
+            if os.environ.get("CLOSE_PUSH") == "1":
+                try:
+                    push_main(c)
+                except Exception as e:
+                    print("close push failed:", e, file=sys.stderr)
             return 0
         try:
             report = build(c, sessions)
