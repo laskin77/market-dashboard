@@ -1,10 +1,10 @@
 name: close
 on:
   schedule:
-    # Taipei = UTC+8. On 2026-11-04 every single-minute cron below was skipped
-    # while live-intraday's crons still fired, so one repeating slot covers
-    # 14:00–19:45. The night loop also dispatches this workflow when its own
-    # close.py fails. Concurrency group is "close", not "live".
+    # Taipei = UTC+8, every 15 minutes from 14:00 to 19:45. On 2026-11-04 the
+    # twelve single-minute crons never created a run, while live-intraday's
+    # crons did. One repeating expression is the schedule; the night loop also
+    # dispatches this workflow when its own close.py fails. Group is "close".
     - cron: "*/15 6-11 * * 1-5"
   workflow_dispatch:
 permissions:
