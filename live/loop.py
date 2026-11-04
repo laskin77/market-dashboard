@@ -71,14 +71,14 @@ def sleep_for(seconds, label):
             next_log = time.monotonic() + 300
         time.sleep(min(remain, 30))
 
-def dispatch_live():
-    """Start a fresh live-intraday run. GITHUB_TOKEN may dispatch workflows."""
+def dispatch_workflow(filename):
+    """Start a workflow on its own runner. GITHUB_TOKEN may dispatch workflows."""
     token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
     repo = os.environ.get("GITHUB_REPOSITORY", "laskin77/market-dashboard")
     if not token:
-        print("no token, cannot dispatch", file=sys.stderr, flush=True)
+        print("no token, cannot dispatch", filename, file=sys.stderr, flush=True)
         return False
-    url = "https://api.github.com/repos/%s/actions/workflows/live.yml/dispatches" % repo
+    url = "https://api.github.com/repos/%s/actions/workflows/%s/dispatches" % (repo, filename)
     req = urllib.request.Request(
         url,
         data=json.dumps({"ref": "main"}).encode(),
@@ -93,15 +93,22 @@ def dispatch_live():
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            print("dispatched live-intraday", resp.status, flush=True)
+            print("dispatched", filename, resp.status, flush=True)
             return 200 <= resp.status < 300
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", "replace")[:300]
-        print("dispatch failed", e.code, detail, file=sys.stderr, flush=True)
+        print("dispatch failed", filename, e.code, detail, file=sys.stderr, flush=True)
         return False
     except Exception as e:
-        print("dispatch failed", e, file=sys.stderr, flush=True)
+        print("dispatch failed", filename, e, file=sys.stderr, flush=True)
         return False
+
+def dispatch_live():
+    return dispatch_workflow("live.yml")
+
+def dispatch_close():
+    """close.yml has its own concurrency group, so a long live job cannot queue it."""
+    return dispatch_workflow("close.yml")
 
 def enter_session():
     """Block until this job should trade. False means the run should stop."""
@@ -186,7 +193,13 @@ def maybe_close(out_dir):
     env["OUT_DIR"] = out_dir
     env["CLOSE_PUSH"] = "1"
     print("close rebuild", t.isoformat(timespec="seconds"), flush=True)
-    subprocess.call([sys.executable, os.path.join(ROOT, "live", "close.py")], env=env)
+    rc = subprocess.call([sys.executable, os.path.join(ROOT, "live", "close.py")], env=env)
+    print("close.py exit", rc, flush=True)
+    # GitHub dropped every close cron on 2026-11-04 while this loop kept running.
+    # A non-zero build starts close.yml on a separate runner instead of waiting
+    # for the next cron, or for this 6-hour job to exit.
+    if rc != 0:
+        dispatch_close()
 
 
 def cycle(out_dir):

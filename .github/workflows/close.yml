@@ -1,24 +1,11 @@
 name: close
 on:
   schedule:
-    # Taipei = UTC+8. GitHub drops single crons and, on 10/23 and 10/26, delivered
-    # every slot 5–7 hours late. The night loop commits the same files on time
-    # (CLOSE_PUSH). These slots stay as the backup. close.py also publishes the
-    # latest FMTQIK session when a delayed run wakes up after midnight.
-    # 14:40 builds 盤勢 / 強勢 / 族群 / ETF as soon as MI_INDEX and TPEx are up.
-    # 16:45 and 17:30 rebuild once T86 and BFI82U are published. Later slots retry.
-    - cron: "40 6 * * 1-5"    # 14:40
-    - cron: "55 6 * * 1-5"    # 14:55
-    - cron: "20 7 * * 1-5"    # 15:20
-    - cron: "40 7 * * 1-5"    # 15:40
-    - cron: "10 8 * * 1-5"    # 16:10
-    - cron: "30 8 * * 1-5"    # 16:30
-    - cron: "45 8 * * 1-5"    # 16:45
-    - cron: "5 9 * * 1-5"     # 17:05
-    - cron: "30 9 * * 1-5"    # 17:30
-    - cron: "15 10 * * 1-5"   # 18:15
-    - cron: "0 11 * * 1-5"    # 19:00
-    - cron: "40 11 * * 1-5"   # 19:40
+    # Taipei = UTC+8. On 2026-11-04 every single-minute cron below was skipped
+    # while live-intraday's crons still fired, so one repeating slot covers
+    # 14:00–19:45. The night loop also dispatches this workflow when its own
+    # close.py fails. Concurrency group is "close", not "live".
+    - cron: "*/15 6-11 * * 1-5"
   workflow_dispatch:
 permissions:
   contents: write

@@ -9,7 +9,7 @@ still publishes the rest and leaves inst.ready false.
 CLOSE_PUSH=1 commits those JSON files to main (used by the live loop).
 The close workflow commits them itself.
 """
-import datetime, json, os, shutil, subprocess, sys, time, urllib.request
+import datetime, hashlib, json, os, shutil, subprocess, sys, time, urllib.request
 
 TZ = datetime.timezone(datetime.timedelta(hours=8))
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -693,41 +693,78 @@ def write_outputs(report, day):
           "strong", [s["code"] for s in report["strong"]["items"]])
 
 
+CLOSE_FILES = ["data/close.json", "data/etf.json", "data/etf_div.json"]
+PUSH_MARKER = "/tmp/mkt-close-pushed"
+
+
+def close_digest():
+    h = hashlib.sha256()
+    for rel in CLOSE_FILES:
+        path = os.path.join(ROOT, rel)
+        if os.path.exists(path):
+            with open(path, "rb") as f:
+                h.update(f.read())
+    return h.hexdigest()
+
+
+def push_marked():
+    try:
+        with open(PUSH_MARKER) as f:
+            return f.read().strip() == close_digest()
+    except Exception:
+        return False
+
+
+def mark_pushed():
+    try:
+        with open(PUSH_MARKER, "w") as f:
+            f.write(close_digest())
+    except Exception:
+        pass
+
+
 def push_main(day):
     """Commit the close files from a fresh clone.
 
     The live checkout is shallow and stays out for hours, so rebasing inside
-    it is not a reliable way onto main.
+    it is not a reliable way onto main. Returns False when the push did not
+    land, so the next pass retries instead of treating the local file as done.
     """
-    files = ["data/close.json", "data/etf.json", "data/etf_div.json"]
     token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
     repo = os.environ.get("GITHUB_REPOSITORY", "laskin77/market-dashboard")
     if not token:
         print("no token, skip close push", file=sys.stderr)
-        return
+        return False
     url = "https://x-access-token:%s@github.com/%s.git" % (token, repo)
     work = "/tmp/mkt-close-push"
     shutil.rmtree(work, ignore_errors=True)
     env = os.environ.copy()
     env["GIT_TERMINAL_PROMPT"] = "0"
-    subprocess.check_call(["git", "clone", "--depth", "20", "--branch", "main", url, work], env=env)
-    for rel in files:
-        shutil.copy(os.path.join(ROOT, rel), os.path.join(work, rel))
-    subprocess.check_call(["git", "config", "user.email", "41898208+github-actions[bot]@users.noreply.github.com"], cwd=work)
-    subprocess.check_call(["git", "config", "user.name", "github-actions[bot]"], cwd=work)
-    subprocess.check_call(["git", "add", *files], cwd=work)
-    if subprocess.call(["git", "diff", "--cached", "--quiet"], cwd=work) == 0:
-        print("close unchanged")
-        return
-    stamp = "%s-%s-%s" % (day[:4], day[4:6], day[6:8])
-    subprocess.check_call(["git", "commit", "-q", "-m", "data: close %s" % stamp], cwd=work)
     try:
-        subprocess.check_call(["git", "push", url, "HEAD:main"], cwd=work, env=env)
-    except subprocess.CalledProcessError:
-        subprocess.check_call(["git", "fetch", "--depth", "20", url, "main"], cwd=work, env=env)
-        subprocess.check_call(["git", "rebase", "FETCH_HEAD"], cwd=work, env=env)
-        subprocess.check_call(["git", "push", url, "HEAD:main"], cwd=work, env=env)
-    print("close pushed", stamp)
+        subprocess.check_call(["git", "clone", "--depth", "20", "--branch", "main", url, work], env=env)
+        for rel in CLOSE_FILES:
+            shutil.copy(os.path.join(ROOT, rel), os.path.join(work, rel))
+        subprocess.check_call(["git", "config", "user.email", "41898208+github-actions[bot]@users.noreply.github.com"], cwd=work)
+        subprocess.check_call(["git", "config", "user.name", "github-actions[bot]"], cwd=work)
+        subprocess.check_call(["git", "add", *CLOSE_FILES], cwd=work)
+        if subprocess.call(["git", "diff", "--cached", "--quiet"], cwd=work) == 0:
+            print("close unchanged")
+            mark_pushed()
+            return True
+        stamp = "%s-%s-%s" % (day[:4], day[4:6], day[6:8])
+        subprocess.check_call(["git", "commit", "-q", "-m", "data: close %s" % stamp], cwd=work)
+        try:
+            subprocess.check_call(["git", "push", url, "HEAD:main"], cwd=work, env=env)
+        except subprocess.CalledProcessError:
+            subprocess.check_call(["git", "fetch", "--depth", "20", url, "main"], cwd=work, env=env)
+            subprocess.check_call(["git", "rebase", "FETCH_HEAD"], cwd=work, env=env)
+            subprocess.check_call(["git", "push", url, "HEAD:main"], cwd=work, env=env)
+    except Exception as e:
+        print("close push failed:", e, file=sys.stderr)
+        return False
+    mark_pushed()
+    print("close pushed", day)
+    return True
 
 
 def already_done(day):
@@ -770,9 +807,14 @@ def main():
             if c == day:
                 print("close already complete", day)
                 copy_out(load_json(os.path.join(ROOT, "data", "close.json")))
+                if os.environ.get("CLOSE_PUSH") == "1" and not push_marked():
+                    if not push_main(c):
+                        return 3
                 return 0
+            # Today never landed and an older session is already complete.
+            # Non-zero tells the night loop to start the standalone close workflow.
             print("close not ready:", day, file=sys.stderr)
-            return 0
+            return 2
         cur = load_json(os.path.join(ROOT, "data", "close.json"))
         if cur and cur.get("date") == c and cur.get("market") and os.environ.get("CLOSE_FORCE") != "1":
             try:
@@ -780,17 +822,14 @@ def main():
             except RuntimeError as e:
                 print("inst not ready:", c, e, file=sys.stderr)
                 if c == day:
-                    return 0
+                    return 2
                 continue
             except Exception as e:
                 print("inst fill failed:", e, file=sys.stderr)
                 return 2
             write_outputs(report, c)
-            if os.environ.get("CLOSE_PUSH") == "1":
-                try:
-                    push_main(c)
-                except Exception as e:
-                    print("close push failed:", e, file=sys.stderr)
+            if os.environ.get("CLOSE_PUSH") == "1" and not push_main(c):
+                return 3
             return 0
         try:
             report = build(c, sessions)
@@ -801,13 +840,10 @@ def main():
             print("close build failed:", e, file=sys.stderr)
             return 2
         write_outputs(report, c)
-        if os.environ.get("CLOSE_PUSH") == "1":
-            try:
-                push_main(c)
-            except Exception as e:
-                print("close push failed:", e, file=sys.stderr)
+        if os.environ.get("CLOSE_PUSH") == "1" and not push_main(c):
+            return 3
         return 0
-    return 0
+    return 2
 
 
 if __name__ == "__main__":

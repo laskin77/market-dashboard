@@ -28,13 +28,17 @@ on:
 permissions:
   contents: write
   actions: write
+# Separate from close.yml's group "close". A queued live run must not be
+# what publishes the cash close; maybe_close dispatches that workflow itself.
 concurrency:
   group: live
   cancel-in-progress: false
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    # The loop stops itself at 340 minutes. A hung runner has to release the
+    # group so the next scheduled start is not pending until the 6-hour cap.
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
         with:
