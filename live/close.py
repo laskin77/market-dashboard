@@ -163,16 +163,21 @@ def parse_taiex(d):
 
 
 def parse_value_yi(d):
-    """成交金額 from 大盤統計資訊, in 億元."""
-    t = table(d, lambda title, fields: "成交金額" in "".join(fields))
+    """成交金額 from 大盤統計資訊 總計(1~15), in 億元.
+
+    FMTQIK's 成交金額 column can still be the earlier print when MI_INDEX
+    already has the final 總計. The 總計 row is the figure the exchange posts
+    next to that session's close.
+    """
+    t = table(d, lambda title, fields: "成交統計" in "".join(str(f) for f in fields) and "成交金額" in "".join(str(f) for f in fields))
     if not t:
         return None
     for row in t["data"]:
-        if "成交金額" in str(row[0]) and "總" in str(row[0]) or str(row[0]).strip() in ("總計", "合計", "成交金額"):
+        label = str(row[0]).strip()
+        if label.startswith("總計"):
             v = fnum(row[1])
             if v:
                 return round(v / 1e8, 2)
-    # FMTQIK is the reliable turnover; caller may override.
     return None
 
 
@@ -262,15 +267,38 @@ def parse_quotes(d):
     return rows
 
 
-def tpex_quotes():
-    rows = []
+def roc_compact(day):
+    """20261106 -> 1151106, the Date field on TPEx open data."""
+    return "%d%02d%02d" % (int(day[:4]) - 1911, int(day[4:6]), int(day[6:8]))
+
+
+def tpex_quotes(day):
+    """Mainboard closes for one session.
+
+    The open file is the whole board, sometimes still stamped with the
+    previous session in the afternoon. Ranking without that date pulls
+    yesterday's movers, or nothing, and a listed-only top five gets saved.
+    """
     try:
         data = get("https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes")
     except Exception as e:
-        print("tpex quotes failed", e, file=sys.stderr)
-        return rows
+        raise RuntimeError("TPEx quotes failed: %s" % e)
+    if isinstance(data, dict):
+        data = data.get("data") or data.get("aaData") or []
+    if not isinstance(data, list):
+        raise RuntimeError("TPEx quotes payload %s" % type(data).__name__)
+    want = roc_compact(day)
+    by = {}
+    seen_dates = set()
     for row in data:
-        code = str(row.get("SecuritiesCompanyCode") or "")
+        if not isinstance(row, dict):
+            continue
+        stamp = "".join(ch for ch in str(row.get("Date") or "") if ch.isdigit())
+        if stamp:
+            seen_dates.add(stamp)
+        if stamp != want:
+            continue
+        code = str(row.get("SecuritiesCompanyCode") or "").strip()
         if not (code.isdigit() and len(code) == 4) or code.startswith("00"):
             continue
         last = fnum(row.get("Close"))
@@ -281,12 +309,14 @@ def tpex_quotes():
         prev = last - chg
         if prev <= 0:
             continue
-        rows.append({
+        by[code] = {
             "code": code, "name": str(row.get("CompanyName") or code).strip(), "mkt": "上櫃",
             "last": last, "chg": round(chg, 2), "pct": round(chg / prev * 100, 2),
             "prev": round(prev, 2), "value": val, "pe": None,
-        })
-    return rows
+        }
+    if not by:
+        raise RuntimeError("TPEx quotes not for %s (saw %s)" % (want, ",".join(sorted(seen_dates)[:4])))
+    return list(by.values())
 
 
 def tpex_index():
@@ -473,10 +503,12 @@ def build(day, sessions=None):
     sessions = sessions or {"days": [], "rows": {}}
     d = mi_index(day)
     taiex = parse_taiex(d)
-    value = fmtqik_turnover(day, sessions)
+    value = parse_value_yi(d)
+    if value is None:
+        value = fmtqik_turnover(day, sessions)
     sectors = parse_sectors(d)
     quotes = parse_quotes(d)
-    quotes.extend(tpex_quotes())
+    quotes.extend(tpex_quotes(day))
     otc = tpex_index()
     if otc["date"] != day:
         raise RuntimeError("TPEx index date %s" % otc["date"])
@@ -780,7 +812,7 @@ def fill_inst(report, day):
     """Add T86/BFI82U onto today's close without rebuilding the other sections."""
     d = mi_index(day)
     quotes = parse_quotes(d)
-    quotes.extend(tpex_quotes())
+    quotes.extend(tpex_quotes(day))
     report = json.loads(json.dumps(report))
     report["inst"] = inst_block(day, quotes)
     report["updated"] = taipei_today().isoformat(timespec="seconds")
