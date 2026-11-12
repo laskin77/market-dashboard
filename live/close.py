@@ -9,7 +9,7 @@ still publishes the rest and leaves inst.ready false.
 CLOSE_PUSH=1 commits those JSON files to main (used by the live loop).
 The close workflow commits them itself.
 """
-import datetime, hashlib, json, os, shutil, subprocess, sys, time, urllib.request
+import datetime, hashlib, json, os, re, shutil, subprocess, sys, time, urllib.request
 
 TZ = datetime.timezone(datetime.timedelta(hours=8))
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -457,6 +457,141 @@ def inst_complete(inst):
     return bool(inst.get("foreign")) and bool(inst.get("trust"))
 
 
+def announced_cash(cell):
+    """TWT48U 現金股利. None while the cell still says the amount is unpublished."""
+    text = re.sub(r"<[^>]+>", "", str(cell or ""))
+    if "待公告" in text:
+        return None
+    n = fnum(text)
+    if n is None or n <= 0:
+        return None
+    return float(format(n, "f").rstrip("0").rstrip("."))
+
+
+def roc_text_to_iso(text):
+    m = re.search(r"(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日", str(text or ""))
+    if not m:
+        return None
+    return "%04d-%02d-%02d" % (int(m.group(1)) + 1911, int(m.group(2)), int(m.group(3)))
+
+
+def md_short(iso):
+    parts = str(iso or "").split("-")
+    if len(parts) < 3:
+        return ""
+    return "%d/%d" % (int(parts[1]), int(parts[2]))
+
+
+def apply_twt48(div, today):
+    """Promote an ETF dividend once TWT48U prints a cash amount.
+
+    A morning pass often still sees 待公告實際收益分配金額. A later pass the
+    same day must replace that estimate; it must not leave the morning note
+    in place, and it must not downgrade a confirmed amount if a later read
+    is empty.
+    """
+    payload = get("https://www.twse.com.tw/rwd/zh/exRight/TWT48U?response=json")
+    if payload.get("stat") != "OK":
+        raise RuntimeError("TWT48U %s" % payload.get("stat"))
+    fields = [str(f) for f in (payload.get("fields") or [])]
+
+    def col(pred, default):
+        for i, name in enumerate(fields):
+            if pred(name):
+                return i
+        return default
+
+    ex_i = col(lambda n: "除權除息日期" in n, 0)
+    code_i = col(lambda n: n.strip() in ("股票代號", "證券代號"), 1)
+    cash_i = col(lambda n: "現金股利" in n, 7)
+    items = div.setdefault("items", {})
+    found = {}
+    for row in payload.get("data") or []:
+        code = str(row[code_i]).strip()
+        if code not in ETFS:
+            continue
+        found[code] = (announced_cash(row[cash_i]), roc_text_to_iso(row[ex_i]))
+    changed = False
+    notes = []
+    for code in ETFS:
+        item = items.get(code)
+        if not item:
+            continue
+        nxt = item.setdefault("next", {})
+        hit = found.get(code)
+        if not hit or hit[0] is None:
+            if code not in found:
+                notes.append("%s 不在預告表" % code)
+            else:
+                notes.append("%s 現金股利仍待公告" % code)
+            continue
+        amt, ex = hit
+        same = nxt.get("status") == "ann" and nxt.get("amt") == amt and (not ex or nxt.get("ex") == ex)
+        if not same:
+            nxt["status"] = "ann"
+            nxt["amt"] = amt
+            if ex:
+                nxt["ex"] = ex
+                nxt["month"] = ex[:7]
+            bits = []
+            if nxt.get("ex"):
+                bits.append("除息 " + md_short(nxt["ex"]))
+            if nxt.get("pay"):
+                bits.append("發放 " + md_short(nxt["pay"]))
+            bits.append("%s元" % amt)
+            nxt["label"] = "　".join(bits)
+            changed = True
+            print("dividend announced", code, amt, nxt.get("ex"), flush=True)
+        notes.append("%s 現金股利 %s 元已公告（除息 %s）" % (code, amt, md_short(nxt.get("ex") or ex)))
+    if changed:
+        div["updated"] = "%s-%s-%s" % (today[:4], today[4:6], today[6:8])
+        div["src"] = "TWSE TWT48U（%s 收盤後核對）：%s。已公告金額寫入 next，不再標預估。" % (
+            "%s-%s-%s" % (today[:4], today[4:6], today[6:8]),
+            "；".join(notes),
+        )
+    return div, changed
+
+
+def refresh_confirmed(report, day):
+    """Update fields that the exchange revises after the first close file.
+
+    Turnover is the MI_INDEX 總計(1~15). Dividends come from TWT48U. Neither
+    change rewrites 盤勢指數, 強勢, 族群, or 法人.
+    """
+    changed = False
+    div_path = os.path.join(ROOT, "data", "etf_div.json")
+    div = load_json(div_path) or {"items": {}}
+    try:
+        div, div_changed = apply_twt48(div, day)
+    except Exception as e:
+        print("dividend refresh failed:", e, file=sys.stderr)
+        div_changed = False
+    if div_changed:
+        save_json(div_path, div)
+        report["div"] = div.get("items") or {}
+        changed = True
+    try:
+        value = parse_value_yi(mi_index(day))
+    except Exception as e:
+        print("turnover refresh failed:", e, file=sys.stderr)
+        value = None
+    taiex = (report.get("market") or {}).get("taiex") or {}
+    if value is not None and taiex.get("value_yi") != value:
+        print("turnover", taiex.get("value_yi"), "->", value, flush=True)
+        taiex["value_yi"] = value
+        summary = report.get("summary") or ""
+        report["summary"] = re.sub(
+            r"成交值 [0-9,]+(?:\.[0-9]+)? 億元",
+            "成交值 %s 億元" % fmt_num(value, 2),
+            summary,
+            count=1,
+        )
+        changed = True
+    if changed:
+        report["updated"] = taipei_today().isoformat(timespec="seconds")
+    return changed
+
+
 def roll_div(div, today):
     """After an announced ex-date, that dividend becomes 上次 and the next slot is an estimate."""
     items = div.get("items") or {}
@@ -837,8 +972,15 @@ def main():
     for c in days:
         if already_done(c) and os.environ.get("CLOSE_FORCE") != "1":
             if c == day:
+                cur = load_json(os.path.join(ROOT, "data", "close.json"))
+                if cur and refresh_confirmed(cur, c):
+                    write_outputs(cur, c)
+                    print("close refreshed", c)
+                    if os.environ.get("CLOSE_PUSH") == "1" and not push_main(c):
+                        return 3
+                    return 0
                 print("close already complete", day)
-                copy_out(load_json(os.path.join(ROOT, "data", "close.json")))
+                copy_out(cur)
                 if os.environ.get("CLOSE_PUSH") == "1" and not push_marked():
                     if not push_main(c):
                         return 3
