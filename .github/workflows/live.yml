@@ -2,7 +2,10 @@ name: live-intraday
 on:
   push:
     branches: [main]
-    paths: ['live/**', '.github/workflows/live.yml']
+    # No path filter. On 2026-11-23 the 07:32 Taipei data push was ignored, and
+    # every morning cron was dropped, so the session never started. A main push
+    # before the open bridges into it; a push while a loop is already running
+    # only queues behind group "live".
   schedule:
     # Taipei = UTC+8. GitHub may drop a single cron, so the day session has several starts.
     # 05:20 (previous evening UTC) lands in the post-night gap and waits for 08:45
