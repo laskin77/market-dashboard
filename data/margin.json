@@ -1,11 +1,11 @@
 {
- "target_date": "2026-11-24",
- "date": "2026-11-24",
- "ratio_tse": 139.12,
+ "target_date": "2026-11-25",
+ "date": "2026-11-25",
+ "ratio_tse": 131.5,
  "source": "CMoney（published）",
  "method": "CMoney 公布之大盤融資維持率（上市；上櫃另列）",
- "margin_balance_yi": 4535.1,
- "margin_change_yi": 197.0,
+ "margin_balance_yi": 4341.4,
+ "margin_change_yi": -193.7,
  "history": [
   [
    "2026-10-12",
@@ -126,6 +126,10 @@
   [
    "2026-11-24",
    139.12
+  ],
+  [
+   "2026-11-25",
+   131.5
   ]
  ],
  "history_otc": [
@@ -244,24 +248,28 @@
   [
    "2026-11-24",
    126.63
+  ],
+  [
+   "2026-11-25",
+   119.19
   ]
  ],
- "generated_at": "2026-11-24T21:38:52+08:00",
- "ratio_otc": 126.63,
+ "generated_at": "2026-11-25T21:36:37+08:00",
+ "ratio_otc": 119.19,
  "cmoney_raw": {
   "tse": {
-   "change": 197.0,
-   "balance": 4535.1,
-   "usage": 5.18,
-   "ratio": 139.1188,
-   "overall": 142.0469
+   "change": -193.7,
+   "balance": 4341.4,
+   "usage": 4.87,
+   "ratio": 131.4992,
+   "overall": 134.5035
   },
   "otc": {
-   "change": 10.3,
-   "balance": 1288.5,
-   "usage": 9.75,
-   "ratio": 126.6334,
-   "overall": 129.7787
+   "change": -9.7,
+   "balance": 1278.8,
+   "usage": 9.67,
+   "ratio": 119.1912,
+   "overall": 122.318
   }
  }
 }
