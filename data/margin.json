@@ -1,15 +1,11 @@
 {
- "target_date": "2026-11-26",
- "date": "2026-11-26",
- "ratio_tse": 159.67,
- "source": "玩股網 WantGoo（published）",
- "method": "玩股網公布之大盤融資維持率（上市；上櫃另列）",
- "estimate_crosscheck": {
-  "ratio_tse": 159.67,
-  "diff_pt": 0.0
- },
- "margin_balance_yi": 4344.84,
- "margin_change_yi": 3.46,
+ "target_date": "2026-11-27",
+ "date": "2026-11-27",
+ "ratio_tse": 139.27,
+ "source": "CMoney（published）",
+ "method": "CMoney 公布之大盤融資維持率（上市；上櫃另列）",
+ "margin_balance_yi": 4301.7,
+ "margin_change_yi": -43.1,
  "history": [
   [
    "2026-10-12",
@@ -138,6 +134,10 @@
   [
    "2026-11-26",
    159.67
+  ],
+  [
+   "2026-11-27",
+   139.27
   ]
  ],
  "history_otc": [
@@ -216,7 +216,28 @@
   [
    "2026-11-25",
    141.77
+  ],
+  [
+   "2026-11-27",
+   126.4
   ]
  ],
- "generated_at": "2026-11-26T21:40:50+08:00"
+ "generated_at": "2026-11-27T21:43:07+08:00",
+ "ratio_otc": 126.4,
+ "cmoney_raw": {
+  "tse": {
+   "change": -43.1,
+   "balance": 4301.7,
+   "usage": 4.53,
+   "ratio": 139.2742,
+   "overall": 142.4338
+  },
+  "otc": {
+   "change": 3.2,
+   "balance": 1300.0,
+   "usage": 9.7,
+   "ratio": 126.4043,
+   "overall": 130.1336
+  }
+ }
 }
